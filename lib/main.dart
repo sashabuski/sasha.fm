@@ -102,7 +102,36 @@ class _RadioScreenState extends State<RadioScreen> {
   // Play button interaction states.
   bool isHovered = false;
   bool isPressed = false;
+  bool eqIsHovered = false;
+bool eqIsPressed = false;
+bool xIsHovered = false;
+bool xIsPressed = false;
+bool isMinHovered = false;
+bool isMinPressed = false;
 
+String get minButtonImage {
+  if (isMinPressed) {
+    return 'assets/min_pressed.png';
+  }
+
+  if (isMinHovered) {
+    return 'assets/min_hover.png';
+  }
+
+  return 'assets/min.png';
+}
+// Determine which close button image should be displayed.
+String get xButtonImage {
+  if (xIsPressed) {
+    return 'assets/xbut_pressed.png';
+  }
+
+  if (xIsHovered) {
+    return 'assets/xbut_hover.png';
+  }
+
+  return 'assets/xbut.png';
+}
   // Determine which image should currently be displayed.
   String get playButtonImage {
     if (isPressed) {
@@ -116,6 +145,18 @@ class _RadioScreenState extends State<RadioScreen> {
     return 'assets/playbut.png';
   }
 
+  String get eqButtonImage {
+  if (eqIsPressed) {
+    return 'assets/eqbut_pressed.png';
+  }
+
+  if (eqIsHovered) {
+    return 'assets/eqbut_hover.png';
+  }
+
+  return 'assets/eqbut.png';
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,7 +169,7 @@ class _RadioScreenState extends State<RadioScreen> {
           // Scale interactive elements with window dimensions.
           final songFontSize = h * 0.14;
           final playButtonWidth = w * 0.24;
-
+          final minButtonWidth = w * 0.053;
           return DragToResizeArea(
             resizeEdgeSize: 10,
             child: Stack(
@@ -137,7 +178,7 @@ class _RadioScreenState extends State<RadioScreen> {
                 Positioned.fill(
                   child: DragToMoveArea(
                     child: Image.asset(
-                      'assets/chosen2.png',
+                      'assets/player.png',
                       fit: BoxFit.fill,
                       width: double.infinity,
                       height: double.infinity,
@@ -172,7 +213,201 @@ class _RadioScreenState extends State<RadioScreen> {
                   ),
                 ),
 
+                // Close window button with hover and pressed states.
+Positioned(
+  right: w * 0.030,
+  top: h * 0.05,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+
+    // Mouse enters button.
+    onEnter: (_) {
+      setState(() {
+        xIsHovered = true;
+      });
+    },
+
+    // Mouse leaves button.
+    onExit: (_) {
+      setState(() {
+        xIsHovered = false;
+        xIsPressed = false;
+      });
+    },
+
+    child: GestureDetector(
+      // Mouse button is pressed.
+      onTapDown: (_) {
+        setState(() {
+          xIsPressed = true;
+        });
+      },
+
+      // Mouse button is released.
+      onTapUp: (_) {
+        setState(() {
+          xIsPressed = false;
+        });
+      },
+
+      // Press is cancelled.
+      onTapCancel: () {
+        setState(() {
+          xIsPressed = false;
+        });
+      },
+
+      // Close application.
+      onTap: () async {
+        await windowManager.close();
+      },
+
+      // Smooth image transitions.
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 120),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+
+        child: Image.asset(
+          xButtonImage,
+          key: ValueKey(xButtonImage),
+          height: h * 0.12,
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
+  ),
+),
+
+
+// Minimise window button.
+Positioned(
+  left: w * 0.821,
+  top: h * 0.054,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+
+    onEnter: (_) {
+      setState(() {
+        isMinHovered = true;
+      });
+    },
+
+    onExit: (_) {
+      setState(() {
+        isMinHovered = false;
+        isMinPressed = false;
+      });
+    },
+
+    child: GestureDetector(
+      onTapDown: (_) {
+        setState(() {
+          isMinPressed = true;
+        });
+      },
+
+      onTapUp: (_) {
+        setState(() {
+          isMinPressed = false;
+        });
+      },
+
+      onTapCancel: () {
+        setState(() {
+          isMinPressed = false;
+        });
+      },
+
+      // Minimise the application window.
+      onTap: () async {
+        await windowManager.minimize();
+      },
+
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 120),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+
+        child: Image.asset(
+          minButtonImage,
+          key: ValueKey(minButtonImage),
+          width: minButtonWidth,
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
+  ),
+),
+                // Equaliser button with hover and pressed states.
+Positioned(
+  left: w * 0.027,
+  top: h * 0.71,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+
+    // Mouse enters button.
+    onEnter: (_) {
+      setState(() {
+        eqIsHovered = true;
+      });
+    },
+
+    // Mouse leaves button.
+    onExit: (_) {
+      setState(() {
+        eqIsHovered = false;
+        eqIsPressed = false;
+      });
+    },
+
+    child: GestureDetector(
+      // Mouse button is pressed.
+      onTapDown: (_) {
+        setState(() {
+          eqIsPressed = true;
+        });
+      },
+
+      // Mouse button is released.
+      onTapUp: (_) {
+        setState(() {
+          eqIsPressed = false;
+        });
+      },
+
+      // Press is cancelled.
+      onTapCancel: () {
+        setState(() {
+          eqIsPressed = false;
+        });
+      },
+
+      // Button clicked.
+      onTap: () {
+        debugPrint('EQUALISER BUTTON PRESSED');
+      },
+
+      // Smoothly transition between button images.
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 120),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+
+        child: Image.asset(
+          eqButtonImage,
+          key: ValueKey(eqButtonImage),
+          width: w * 0.08,
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
+  ),
+),
+                
                 // Play button with hover and pressed states.
+                
+                
                 Positioned(
                   left: w * 0.12,
                   top: h * 0.71,
@@ -237,6 +472,9 @@ class _RadioScreenState extends State<RadioScreen> {
                     ),
                   ),
                 ),
+
+
+                
               ],
             ),
           );
