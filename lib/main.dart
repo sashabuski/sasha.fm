@@ -1,6 +1,8 @@
 
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:desktop_music_player/services/streaming_service.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
@@ -102,36 +104,104 @@ class _RadioScreenState extends State<RadioScreen> {
   // Play button interaction states.
   bool isHovered = false;
   bool isPressed = false;
+
   bool eqIsHovered = false;
-bool eqIsPressed = false;
-bool xIsHovered = false;
-bool xIsPressed = false;
-bool isMinHovered = false;
-bool isMinPressed = false;
+  bool eqIsPressed = false;
 
-String get minButtonImage {
-  if (isMinPressed) {
-    return 'assets/min_pressed.png';
+  bool xIsHovered = false;
+  bool xIsPressed = false;
+
+  bool isMinHovered = false;
+  bool isMinPressed = false;
+
+  // LiveKit streaming service.
+  late final StreamingService streamingService;
+
+  bool isConnecting = false;
+  bool isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    streamingService = StreamingService();
   }
 
-  if (isMinHovered) {
-    return 'assets/min_hover.png';
+  // Connect or disconnect from the radio.
+  Future<void> toggleListening() async {
+    if (isConnecting) return;
+
+    setState(() {
+      isConnecting = true;
+    });
+
+    try {
+      if (isListening) {
+        await streamingService.disconnect();
+
+        if (mounted) {
+          setState(() {
+            isListening = false;
+          });
+        }
+      } else {
+        await streamingService.connectAsListener();
+
+        if (mounted) {
+          setState(() {
+            isListening = true;
+          });
+        }
+      }
+    } catch (error) {
+      debugPrint('LiveKit connection error: $error');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection failed: $error'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isConnecting = false;
+        });
+      }
+    }
   }
 
-  return 'assets/min.png';
-}
-// Determine which close button image should be displayed.
-String get xButtonImage {
-  if (xIsPressed) {
-    return 'assets/xbut_pressed.png';
+  @override
+  void dispose() {
+    unawaited(streamingService.dispose());
+    super.dispose();
   }
 
-  if (xIsHovered) {
-    return 'assets/xbut_hover.png';
+  String get minButtonImage {
+    if (isMinPressed) {
+      return 'assets/min_pressed.png';
+    }
+
+    if (isMinHovered) {
+      return 'assets/min_hover.png';
+    }
+
+    return 'assets/min.png';
   }
 
-  return 'assets/xbut.png';
-}
+  // Determine which close button image should be displayed.
+  String get xButtonImage {
+    if (xIsPressed) {
+      return 'assets/xbut_pressed.png';
+    }
+
+    if (xIsHovered) {
+      return 'assets/xbut_hover.png';
+    }
+
+    return 'assets/xbut.png';
+  }
+
   // Determine which image should currently be displayed.
   String get playButtonImage {
     if (isPressed) {
@@ -146,16 +216,16 @@ String get xButtonImage {
   }
 
   String get eqButtonImage {
-  if (eqIsPressed) {
-    return 'assets/eqbut_pressed.png';
-  }
+    if (eqIsPressed) {
+      return 'assets/eqbut_pressed.png';
+    }
 
-  if (eqIsHovered) {
-    return 'assets/eqbut_hover.png';
-  }
+    if (eqIsHovered) {
+      return 'assets/eqbut_hover.png';
+    }
 
-  return 'assets/eqbut.png';
-}
+    return 'assets/eqbut.png';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +240,7 @@ String get xButtonImage {
           final songFontSize = h * 0.14;
           final playButtonWidth = w * 0.24;
           final minButtonWidth = w * 0.053;
+
           return DragToResizeArea(
             resizeEdgeSize: 10,
             child: Stack(
@@ -213,255 +284,197 @@ String get xButtonImage {
                   ),
                 ),
 
-                // Close window button with hover and pressed states.
-Positioned(
-  right: w * 0.030,
-  top: h * 0.05,
-  child: MouseRegion(
-    cursor: SystemMouseCursors.click,
+                // Close window button.
+                Positioned(
+                  right: w * 0.030,
+                  top: h * 0.05,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    onEnter: (_) {
+                      setState(() {
+                        xIsHovered = true;
+                      });
+                    },
+                    onExit: (_) {
+                      setState(() {
+                        xIsHovered = false;
+                        xIsPressed = false;
+                      });
+                    },
+                    child: GestureDetector(
+                      onTapDown: (_) {
+                        setState(() {
+                          xIsPressed = true;
+                        });
+                      },
+                      onTapUp: (_) {
+                        setState(() {
+                          xIsPressed = false;
+                        });
+                      },
+                      onTapCancel: () {
+                        setState(() {
+                          xIsPressed = false;
+                        });
+                      },
+                      onTap: () async {
+                        await windowManager.close();
+                      },
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 120),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: Image.asset(
+                          xButtonImage,
+                          key: ValueKey(xButtonImage),
+                          height: h * 0.12,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
-    // Mouse enters button.
-    onEnter: (_) {
-      setState(() {
-        xIsHovered = true;
-      });
-    },
+                // Minimise window button.
+                Positioned(
+                  left: w * 0.821,
+                  top: h * 0.054,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    onEnter: (_) {
+                      setState(() {
+                        isMinHovered = true;
+                      });
+                    },
+                    onExit: (_) {
+                      setState(() {
+                        isMinHovered = false;
+                        isMinPressed = false;
+                      });
+                    },
+                    child: GestureDetector(
+                      onTapDown: (_) {
+                        setState(() {
+                          isMinPressed = true;
+                        });
+                      },
+                      onTapUp: (_) {
+                        setState(() {
+                          isMinPressed = false;
+                        });
+                      },
+                      onTapCancel: () {
+                        setState(() {
+                          isMinPressed = false;
+                        });
+                      },
+                      onTap: () async {
+                        await windowManager.minimize();
+                      },
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 120),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: Image.asset(
+                          minButtonImage,
+                          key: ValueKey(minButtonImage),
+                          width: minButtonWidth,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
-    // Mouse leaves button.
-    onExit: (_) {
-      setState(() {
-        xIsHovered = false;
-        xIsPressed = false;
-      });
-    },
+                // Equaliser button.
+                Positioned(
+                  left: w * 0.027,
+                  top: h * 0.71,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    onEnter: (_) {
+                      setState(() {
+                        eqIsHovered = true;
+                      });
+                    },
+                    onExit: (_) {
+                      setState(() {
+                        eqIsHovered = false;
+                        eqIsPressed = false;
+                      });
+                    },
+                    child: GestureDetector(
+                      onTapDown: (_) {
+                        setState(() {
+                          eqIsPressed = true;
+                        });
+                      },
+                      onTapUp: (_) {
+                        setState(() {
+                          eqIsPressed = false;
+                        });
+                      },
+                      onTapCancel: () {
+                        setState(() {
+                          eqIsPressed = false;
+                        });
+                      },
+                      onTap: () {
+                        debugPrint('EQUALISER BUTTON PRESSED');
+                      },
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 120),
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        child: Image.asset(
+                          eqButtonImage,
+                          key: ValueKey(eqButtonImage),
+                          width: w * 0.08,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
-    child: GestureDetector(
-      // Mouse button is pressed.
-      onTapDown: (_) {
-        setState(() {
-          xIsPressed = true;
-        });
-      },
-
-      // Mouse button is released.
-      onTapUp: (_) {
-        setState(() {
-          xIsPressed = false;
-        });
-      },
-
-      // Press is cancelled.
-      onTapCancel: () {
-        setState(() {
-          xIsPressed = false;
-        });
-      },
-
-      // Close application.
-      onTap: () async {
-        await windowManager.close();
-      },
-
-      // Smooth image transitions.
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 120),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-
-        child: Image.asset(
-          xButtonImage,
-          key: ValueKey(xButtonImage),
-          height: h * 0.12,
-          fit: BoxFit.contain,
-        ),
-      ),
-    ),
-  ),
-),
-
-
-// Minimise window button.
-Positioned(
-  left: w * 0.821,
-  top: h * 0.054,
-  child: MouseRegion(
-    cursor: SystemMouseCursors.click,
-
-    onEnter: (_) {
-      setState(() {
-        isMinHovered = true;
-      });
-    },
-
-    onExit: (_) {
-      setState(() {
-        isMinHovered = false;
-        isMinPressed = false;
-      });
-    },
-
-    child: GestureDetector(
-      onTapDown: (_) {
-        setState(() {
-          isMinPressed = true;
-        });
-      },
-
-      onTapUp: (_) {
-        setState(() {
-          isMinPressed = false;
-        });
-      },
-
-      onTapCancel: () {
-        setState(() {
-          isMinPressed = false;
-        });
-      },
-
-      // Minimise the application window.
-      onTap: () async {
-        await windowManager.minimize();
-      },
-
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 120),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-
-        child: Image.asset(
-          minButtonImage,
-          key: ValueKey(minButtonImage),
-          width: minButtonWidth,
-          fit: BoxFit.contain,
-        ),
-      ),
-    ),
-  ),
-),
-                // Equaliser button with hover and pressed states.
-Positioned(
-  left: w * 0.027,
-  top: h * 0.71,
-  child: MouseRegion(
-    cursor: SystemMouseCursors.click,
-
-    // Mouse enters button.
-    onEnter: (_) {
-      setState(() {
-        eqIsHovered = true;
-      });
-    },
-
-    // Mouse leaves button.
-    onExit: (_) {
-      setState(() {
-        eqIsHovered = false;
-        eqIsPressed = false;
-      });
-    },
-
-    child: GestureDetector(
-      // Mouse button is pressed.
-      onTapDown: (_) {
-        setState(() {
-          eqIsPressed = true;
-        });
-      },
-
-      // Mouse button is released.
-      onTapUp: (_) {
-        setState(() {
-          eqIsPressed = false;
-        });
-      },
-
-      // Press is cancelled.
-      onTapCancel: () {
-        setState(() {
-          eqIsPressed = false;
-        });
-      },
-
-      // Button clicked.
-      onTap: () {
-        debugPrint('EQUALISER BUTTON PRESSED');
-      },
-
-      // Smoothly transition between button images.
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 120),
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-
-        child: Image.asset(
-          eqButtonImage,
-          key: ValueKey(eqButtonImage),
-          width: w * 0.08,
-          fit: BoxFit.contain,
-        ),
-      ),
-    ),
-  ),
-),
-                
-                // Play button with hover and pressed states.
-                
-                
+                // Play button: connects to or disconnects from LiveKit.
                 Positioned(
                   left: w * 0.12,
                   top: h * 0.71,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
-
-                    // Mouse enters button.
                     onEnter: (_) {
                       setState(() {
                         isHovered = true;
                       });
                     },
-
-                    // Mouse leaves button.
                     onExit: (_) {
                       setState(() {
                         isHovered = false;
                         isPressed = false;
                       });
                     },
-
                     child: GestureDetector(
-                      // Mouse button is pressed.
                       onTapDown: (_) {
                         setState(() {
                           isPressed = true;
                         });
                       },
-
-                      // Mouse button is released.
                       onTapUp: (_) {
                         setState(() {
                           isPressed = false;
                         });
                       },
-
-                      // Press is cancelled.
                       onTapCancel: () {
                         setState(() {
                           isPressed = false;
                         });
                       },
-
-                      // Button clicked.
-                      onTap: () {
-                        debugPrint('PLAY BUTTON PRESSED');
-                      },
-
-                      // Smoothly transition between button images.
+                      onTap: toggleListening,
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 120),
                         switchInCurve: Curves.easeOut,
                         switchOutCurve: Curves.easeIn,
-
                         child: Image.asset(
                           playButtonImage,
                           key: ValueKey(playButtonImage),
@@ -472,9 +485,6 @@ Positioned(
                     ),
                   ),
                 ),
-
-
-                
               ],
             ),
           );
