@@ -23,7 +23,7 @@ Future<void> main() async {
 
   // Minimum and maximum window scales.
   const minimumScale = 0.2;
-  const maximumScale = 0.3;
+  const maximumScale = 0.8;
 
   // Calculate maximum dimensions while preserving aspect ratio.
   final maxWidth = math.min(
@@ -100,8 +100,8 @@ class RadioScreen extends StatefulWidget {
   State<RadioScreen> createState() => _RadioScreenState();
 }
 
-class _RadioScreenState extends State<RadioScreen> {
-  // Play button interaction states.
+class _RadioScreenState extends State<RadioScreen>
+    with SingleTickerProviderStateMixin {  // Play button interaction states.
   bool isHovered = false;
   bool isPressed = false;
 
@@ -111,57 +111,104 @@ class _RadioScreenState extends State<RadioScreen> {
   bool xIsHovered = false;
   bool xIsPressed = false;
 
+  bool windowIsHovered = false;
+bool windowIsPressed = false;
+  bool isPowerOn = false;
   bool isMinHovered = false;
   bool isMinPressed = false;
 
   // LiveKit streaming service.
   late final StreamingService streamingService;
-
+late AnimationController mascotController;
+late Animation<double> mascotOpacity;
   bool isConnecting = false;
   bool isListening = false;
 
   @override
-  void initState() {
-    super.initState();
-    streamingService = StreamingService();
-  }
+void initState() {
+  super.initState();
+
+  streamingService = StreamingService();
+
+  mascotController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  mascotOpacity = TweenSequence<double>([
+    TweenSequenceItem(
+      tween: Tween(begin: 0.0, end: 0.8),
+      weight: 15,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 0.8, end: 0.15),
+      weight: 10,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 0.15, end: 0.8),
+      weight: 15,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 0.8, end: 0.3),
+      weight: 10,
+    ),
+    TweenSequenceItem(
+      tween: Tween(begin: 0.3, end: 0.8),
+      weight: 20,
+    ),
+    TweenSequenceItem(
+      tween: ConstantTween(0.8),
+      weight: 30,
+    ),
+  ]).animate(mascotController);
+}
 
   // Connect or disconnect from the radio.
-  Future<void> toggleListening() async {
-    if (isConnecting) return;
-
+ Future<void> toggleListening() async {
+  if (isPowerOn) {
+    // Turn radio OFF.
     setState(() {
-      isConnecting = true;
+      isPowerOn = false;
+      isListening = false;
     });
 
+    mascotController.reset();
+
+    await streamingService.disconnect();
+
+  } else {
+    // Turn radio ON.
+    setState(() {
+      isPowerOn = true;
+    });
+
+    // Start mascot flicker animation.
+    mascotController.forward(from: 0);
+
     try {
-      if (isListening) {
-        await streamingService.disconnect();
+      setState(() {
+        isConnecting = true;
+      });
 
-        if (mounted) {
-          setState(() {
-            isListening = false;
-          });
-        }
-      } else {
-        await streamingService.connectAsListener();
+      await streamingService.connectAsListener();
 
-        if (mounted) {
-          setState(() {
-            isListening = true;
-          });
-        }
-      }
-    } catch (error) {
-      debugPrint('LiveKit connection error: $error');
+      setState(() {
+        isListening = true;
+      });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Connection failed: $error'),
-          ),
-        );
-      }
+    } catch (e) {
+      debugPrint('Connection error: $e');
+
+      if (!mounted) return;
+
+      // Connection failed: turn radio OFF.
+      setState(() {
+        isPowerOn = false;
+        isListening = false;
+      });
+
+      mascotController.reset();
+
     } finally {
       if (mounted) {
         setState(() {
@@ -170,12 +217,69 @@ class _RadioScreenState extends State<RadioScreen> {
       }
     }
   }
+}
 
-  @override
-  void dispose() {
-    unawaited(streamingService.dispose());
-    super.dispose();
+Future<void> toggleWindowSize() async {
+
+  // Get screen dimensions.
+  final display = await screenRetriever.getPrimaryDisplay();
+  final screenSize = display.size;
+
+  // Match your existing main() configuration.
+  const contentRatio = 3.0;
+  const minimumScale = 0.2;
+  const maximumScale = 0.8;
+
+  // Calculate maximum dimensions.
+  final maxWidth = math.min(
+    screenSize.width * maximumScale,
+    screenSize.height * 0.8 * contentRatio,
+  );
+
+  final maxHeight = maxWidth / contentRatio;
+
+  // Calculate minimum dimensions.
+  final minWidth = math.min(
+    screenSize.width * minimumScale,
+    maxWidth,
+  );
+
+  final minHeight = minWidth / contentRatio;
+
+  // Get current window dimensions.
+  final currentSize = await windowManager.getSize();
+
+  // Calculate distance between two sizes.
+  double distance(Size a, Size b) {
+    final dx = a.width - b.width;
+    final dy = a.height - b.height;
+
+    return dx * dx + dy * dy;
   }
+
+  final minSize = Size(minWidth, minHeight);
+  final maxSize = Size(maxWidth, maxHeight);
+
+  // Determine which target is furthest away.
+  final distanceToMin = distance(currentSize, minSize);
+  final distanceToMax = distance(currentSize, maxSize);
+
+  final targetSize = distanceToMax >= distanceToMin
+      ? maxSize
+      : minSize;
+
+  // Resize the window.
+  await windowManager.setSize(targetSize);
+
+  // Reposition it centrally.
+  await windowManager.center();
+}
+ @override
+void dispose() {
+  mascotController.dispose();
+  unawaited(streamingService.dispose());
+  super.dispose();
+}
 
   String get minButtonImage {
     if (isMinPressed) {
@@ -201,32 +305,49 @@ class _RadioScreenState extends State<RadioScreen> {
 
     return 'assets/xbut.png';
   }
+  String get windowButtonImage {
+  if (windowIsPressed) {
+    return 'assets/WINDOWBUTPRESSED.png';
+  }
+
+  if (windowIsHovered) {
+    return 'assets/WINDOWBUTHOVERED.png';
+  }
+
+  return 'assets/WINDOWBUT.png';
+}
 
   // Determine which image should currently be displayed.
-  String get playButtonImage {
-    if (isPressed) {
-      return 'assets/playbut_pressed.png';
-    }
-
-    if (isHovered) {
-      return 'assets/playbut_hovered.png';
-    }
-
-    return 'assets/playbut.png';
+  String get onButtonImage {
+  if (isPowerOn) {
+    if (isPressed) return 'assets/pinkonbutpressed.png';
+    if (isHovered) return 'assets/pinkonbuthovered.png';
+    return 'assets/pinkonbutdefault.png';
   }
+
+  if (isPressed) return 'assets/onbutpressed.png';
+  if (isHovered) return 'assets/onbuthovered.png';
+
+  return 'assets/onbutdefault.png';
+}
 
   String get eqButtonImage {
-    if (eqIsPressed) {
-      return 'assets/eqbut_pressed.png';
-    }
-
-    if (eqIsHovered) {
-      return 'assets/eqbut_hover.png';
-    }
-
-    return 'assets/eqbut.png';
+  // Device OFF.
+  if (!isPowerOn) {
+    return 'assets/eqbutoff.png';
   }
 
+  // Device ON.
+  if (eqIsPressed) {
+    return 'assets/eqbut_pressed.png';
+  }
+
+  if (eqIsHovered) {
+    return 'assets/eqbut_hover.png';
+  }
+
+  return 'assets/eqbut.png';
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -239,7 +360,7 @@ class _RadioScreenState extends State<RadioScreen> {
           // Scale interactive elements with window dimensions.
           final songFontSize = h * 0.14;
           final playButtonWidth = w * 0.24;
-          final minButtonWidth = w * 0.053;
+          final minButtonWidth = w * 0.047;
 
           return DragToResizeArea(
             resizeEdgeSize: 10,
@@ -258,16 +379,82 @@ class _RadioScreenState extends State<RadioScreen> {
                 ),
 
                 // Foreground: mascot.
-                Positioned(
-                  left: w * -0.055,
-                  top: h * 0.17,
-                  width: w * 0.45,
-                  height: h * 0.45,
-                  child: Image.asset(
-                    'assets/chosenMascot.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
+          Positioned(
+  left: w * -0.07,
+  top: h * 0.3,
+  width: w * 0.4,
+  height: h * 0.4,
+  child: AnimatedBuilder(
+    animation: mascotOpacity,
+    builder: (context, child) {
+      return Opacity(
+        opacity: isPowerOn ? mascotOpacity.value : 0.0,
+        child: child,
+      );
+    },
+    child: Image.asset(
+      'assets/chosenMascot.png',
+      fit: BoxFit.contain,
+    ),
+  ),
+),
+
+Positioned(
+  left: w * 0.17,
+  top: h * 0.183,
+  width: w * 0.114,
+  height: h * 0.114,
+ 
+    child: Image.asset(
+      'assets/livelight.png',
+      fit: BoxFit.contain,
+    ),
+
+),
+
+Positioned(
+  left: w * -0.04,
+  top: h * 0.426,
+  width: w * 0.14,
+  height: h * 0.14,
+  child: Opacity(
+    opacity: isPowerOn ? 0.8 : 0.0,
+    child: Image.asset(
+      'assets/light1.png',
+      fit: BoxFit.contain,
+    ),
+  ),
+),
+
+
+
+Positioned(
+  left: w * 0.459,
+  bottom: h * 0.115,
+  width: w * 0.09,
+  height: h * 0.09,
+  child: Opacity(
+    opacity: isPowerOn ? 0.8 : 0.0,
+    child: Image.asset(
+      'assets/nose.png',
+      fit: BoxFit.contain,
+    ),
+  ),
+),
+
+             Positioned(
+  left: w * 0.126,
+  top: h * 0.409,
+  width: w * 0.19,
+  height: h * 0.19,
+  child: Opacity(
+    opacity: isPowerOn ? 0.8 : 0.0,
+    child: Image.asset(
+      'assets/light2.png',
+      fit: BoxFit.contain,
+    ),
+  ),
+),
 
                 // Song title.
                 Positioned(
@@ -286,8 +473,8 @@ class _RadioScreenState extends State<RadioScreen> {
 
                 // Close window button.
                 Positioned(
-                  right: w * 0.030,
-                  top: h * 0.05,
+                  right: w * 0.085,
+                  top: h * 0.189,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) {
@@ -327,7 +514,7 @@ class _RadioScreenState extends State<RadioScreen> {
                         child: Image.asset(
                           xButtonImage,
                           key: ValueKey(xButtonImage),
-                          height: h * 0.12,
+                          height: h * 0.102,
                           fit: BoxFit.contain,
                         ),
                       ),
@@ -335,10 +522,70 @@ class _RadioScreenState extends State<RadioScreen> {
                   ),
                 ),
 
+
+// Window maximise / restore button.
+Positioned(
+  left: w * 0.825,
+  top: h * 0.188,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+
+    onEnter: (_) {
+      setState(() {
+        windowIsHovered = true;
+      });
+    },
+
+    onExit: (_) {
+      setState(() {
+        windowIsHovered = false;
+        windowIsPressed = false;
+      });
+    },
+
+    child: GestureDetector(
+      onTapDown: (_) {
+        setState(() {
+          windowIsPressed = true;
+        });
+      },
+
+      onTapUp: (_) {
+        setState(() {
+          windowIsPressed = false;
+        });
+      },
+
+      onTapCancel: () {
+        setState(() {
+          windowIsPressed = false;
+        });
+      },
+
+      onTap: toggleWindowSize,
+
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 120),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+
+        child: Image.asset(
+          windowButtonImage,
+          key: ValueKey(windowButtonImage),
+          height: h * 0.102,
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
+  ),
+),
+
+
+
                 // Minimise window button.
                 Positioned(
-                  left: w * 0.821,
-                  top: h * 0.054,
+                  left: w * 0.778,
+                  top: h * 0.192,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) {
@@ -388,8 +635,8 @@ class _RadioScreenState extends State<RadioScreen> {
 
                 // Equaliser button.
                 Positioned(
-                  left: w * 0.027,
-                  top: h * 0.71,
+                  left: w * 0.692,
+                  top: h * 0.78,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) {
@@ -437,61 +684,59 @@ class _RadioScreenState extends State<RadioScreen> {
                   ),
                 ),
 
-                // Play button: connects to or disconnects from LiveKit.
-                Positioned(
-                  left: w * 0.12,
-                  top: h * 0.71,
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    onEnter: (_) {
-                      setState(() {
-                        isHovered = true;
-                      });
-                    },
-                    onExit: (_) {
-                      setState(() {
-                        isHovered = false;
-                        isPressed = false;
-                      });
-                    },
-                    child: GestureDetector(
-                      onTapDown: (_) {
-                        setState(() {
-                          isPressed = true;
-                        });
-                      },
-                      onTapUp: (_) {
-                        setState(() {
-                          isPressed = false;
-                        });
-                      },
-                      onTapCancel: () {
-                        setState(() {
-                          isPressed = false;
-                        });
-                      },
-                      onTap: toggleListening,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 120),
-                        switchInCurve: Curves.easeOut,
-                        switchOutCurve: Curves.easeIn,
-                        child: Image.asset(
-                          playButtonImage,
-                          key: ValueKey(playButtonImage),
-                          width: playButtonWidth,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-
-            
+              // ON/OFF power button.
+// ON/OFF power button.
+Positioned(
+  left: w * 0.067,
+  bottom: h * 0.077,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) {
+      setState(() {
+        isHovered = true;
+      });
+    },
+    onExit: (_) {
+      setState(() {
+        isHovered = false;
+        isPressed = false;
+      });
+    },
+    child: GestureDetector(
+      onTapDown: (_) {
+        setState(() {
+          isPressed = true;
+        });
+      },
+      onTapUp: (_) {
+        setState(() {
+          isPressed = false;
+        });
+      },
+      onTapCancel: () {
+        setState(() {
+          isPressed = false;
+        });
+      },
+      onTap: toggleListening,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 120),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: Image.asset(
+          onButtonImage,
+          key: ValueKey(onButtonImage),
+          width: w * 0.058,
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
+  ),
+),  
 // Red LIVE indicator - only visible when broadcaster is live.
 Positioned(
-  left: w * 0.191,
-  top: h * 0.054,
+  left: w * 0.18,
+  top: h * 0.188,
   child: ValueListenableBuilder<bool>(
     valueListenable: streamingService.isBroadcasterLive,
     builder: (context, isLive, child) {
@@ -501,7 +746,7 @@ Positioned(
 
       return Image.asset(
         'assets/live.png',
-        height: h * 0.12,
+        height: h * 0.106,
         fit: BoxFit.contain,
       );
     },

@@ -37,6 +37,7 @@ flutter:
     - assets/playbut_pressed.png
     - assets/chosen2.png
     - assets/player.png
+    - assets/eqbutoff.png
     - assets/eqbut.png
     - assets/eqbut_hover.png
     - assets/eqbut_pressed.png
@@ -47,3 +48,16 @@ flutter:
     - assets/min_hover.png
     - assets/min_pressed.png
     - assets/live.png
+    - assets/onbutdefault.png
+    - assets/onbuthovered.png
+    - assets/onbutpressed.png
+    - assets/pinkonbutdefault.png
+    - assets/pinkonbuthovered.png
+    - assets/pinkonbutpressed.png
+    - assets/light1.png
+    - assets/light2.png
+    - assets/livelight.png
+    - assets/nose.png
+    - assets/windowbut.png
+    - assets/windowbuthovered.png
+    - assets/windowbutpressed.png
