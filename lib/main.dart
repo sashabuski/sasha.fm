@@ -485,6 +485,29 @@ class _RadioScreenState extends State<RadioScreen> {
                     ),
                   ),
                 ),
+
+
+            
+// Red LIVE indicator - only visible when broadcaster is live.
+Positioned(
+  left: w * 0.191,
+  top: h * 0.054,
+  child: ValueListenableBuilder<bool>(
+    valueListenable: streamingService.isBroadcasterLive,
+    builder: (context, isLive, child) {
+      if (!isLive) {
+        return const SizedBox.shrink();
+      }
+
+      return Image.asset(
+        'assets/live.png',
+        height: h * 0.12,
+        fit: BoxFit.contain,
+      );
+    },
+  ),
+),
+
               ],
             ),
           );
