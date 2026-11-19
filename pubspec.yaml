@@ -61,3 +61,18 @@ flutter:
     - assets/windowbut.png
     - assets/windowbuthovered.png
     - assets/windowbutpressed.png
+    - assets/volarea.png
+    - assets/cyanfill.png
+    - assets/sliderbut.png
+    - assets/sliderbuthovered.png
+    - assets/sliderbutpressed.png
+
+
+  fonts:
+    - family: digital
+      fonts:
+        - asset: assets/fonts/digital1.ttf
+
+    - family: retro
+      fonts:
+        - asset: assets/fonts/retro.ttf

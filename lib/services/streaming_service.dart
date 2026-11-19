@@ -10,7 +10,13 @@ class StreamingService {
   static const String _tokenServer =
       'http://127.0.0.1:3000';
 
+  static const String _equaliserTopic =
+      'sasha-fm-equaliser';
+
+  static const int _equaliserBandCount = 32;
+
   Room? _room;
+  EventsListener<RoomEvent>? _roomListener;
 
   Timer? _statusTimer;
   bool _checkingStatus = false;
@@ -18,6 +24,12 @@ class StreamingService {
   // True whenever the C++ broadcaster is connected to LiveKit.
   final ValueNotifier<bool> isBroadcasterLive =
       ValueNotifier<bool>(false);
+
+  // The latest 32 equaliser values, normalised between 0.0 and 1.0.
+  final ValueNotifier<List<double>> equaliserBands =
+      ValueNotifier<List<double>>(
+    List<double>.filled(_equaliserBandCount, 0.0),
+  );
 
   StreamingService() {
     // Check immediately, then every two seconds.
@@ -89,24 +101,67 @@ class StreamingService {
 
     final room = Room();
 
+    // Register the data listener before connecting.
+    final listener = room.createListener();
+
+    listener.on<DataReceivedEvent>(_handleDataReceived);
+
     try {
       await room.connect(serverUrl, token);
+
       _room = room;
+      _roomListener = listener;
+
+      debugPrint('Connected to LiveKit as listener.');
     } catch (_) {
+      await listener.dispose();
       await room.dispose();
       rethrow;
     }
   }
 
+  // Receive equaliser data from the C++ broadcaster.
+  void _handleDataReceived(DataReceivedEvent event) {
+    // Ignore all other LiveKit data messages.
+    if (event.topic != _equaliserTopic) return;
+
+    // We expect exactly 32 bytes.
+    if (event.data.length != _equaliserBandCount) {
+      debugPrint(
+        'Invalid equaliser packet: '
+        '${event.data.length} bytes received.',
+      );
+      return;
+    }
+
+    // Convert each byte (0-255) into a value (0.0-1.0).
+    final bands = event.data.map((value) {
+      return (value.clamp(0, 255)) / 255.0;
+    }).toList(growable: false);
+
+    equaliserBands.value = bands;
+  }
+
   // Disconnect the listener.
   Future<void> disconnect() async {
+    final listener = _roomListener;
     final room = _room;
+
+    _roomListener = null;
     _room = null;
+
+    if (listener != null) {
+      await listener.dispose();
+    }
 
     if (room != null) {
       await room.disconnect();
       await room.dispose();
     }
+
+    // Reset the equaliser when disconnected.
+    equaliserBands.value =
+        List<double>.filled(_equaliserBandCount, 0.0);
   }
 
   Future<void> dispose() async {
@@ -115,5 +170,6 @@ class StreamingService {
     await disconnect();
 
     isBroadcasterLive.dispose();
+    equaliserBands.dispose();
   }
 }

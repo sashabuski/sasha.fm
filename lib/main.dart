@@ -116,7 +116,10 @@ bool windowIsPressed = false;
   bool isPowerOn = false;
   bool isMinHovered = false;
   bool isMinPressed = false;
+double volume = 0.7;
 
+bool sliderIsHovered = false;
+bool sliderIsPressed = false;
   // LiveKit streaming service.
   late final StreamingService streamingService;
 late AnimationController mascotController;
@@ -219,6 +222,27 @@ void initState() {
   }
 }
 
+
+void updateVolume(double pointerX, double trackWidth) {
+  const grooveStart = 0.205;
+  const grooveEnd = 0.96;
+
+  final knobWidth = trackWidth * 0.16;
+
+  final minPosition = trackWidth * grooveStart + knobWidth / 2;
+  final maxPosition = trackWidth * grooveEnd - knobWidth / 2;
+
+  final newVolume = ((pointerX - minPosition) /
+          (maxPosition - minPosition))
+      .clamp(0.0, 1.0);
+
+  setState(() {
+    volume = newVolume;
+  });
+}
+
+
+
 Future<void> toggleWindowSize() async {
 
   // Get screen dimensions.
@@ -279,6 +303,18 @@ void dispose() {
   mascotController.dispose();
   unawaited(streamingService.dispose());
   super.dispose();
+}
+
+String get sliderButtonImage {
+  if (sliderIsPressed) {
+    return 'assets/sliderbutpressed.png';
+  }
+
+  if (sliderIsHovered) {
+    return 'assets/sliderbuthovered.png';
+  }
+
+  return 'assets/sliderbut.png';
 }
 
   String get minButtonImage {
@@ -358,7 +394,8 @@ void dispose() {
           final h = constraints.maxHeight;
 
           // Scale interactive elements with window dimensions.
-          final songFontSize = h * 0.14;
+          final songFontSize = h * 0.12;
+        final stationFontSize = h * 0.06;
           final playButtonWidth = w * 0.24;
           final minButtonWidth = w * 0.047;
 
@@ -412,6 +449,159 @@ Positioned(
 
 ),
 
+// VOLUME SLIDER.
+Positioned(
+  right: w * 0.12,
+  bottom: h*-0.006,
+  width: w * 0.308,
+  height: h * 0.308,
+  child: Center(
+    child: SizedBox(
+      width: w * 0.31,
+      height: w * 0.31 * (296 / 1462),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final trackWidth = constraints.maxWidth;
+          final trackHeight = constraints.maxHeight;
+
+          const grooveStart = 0.205;
+          const grooveEnd = 0.96;
+
+          final knobWidth = trackWidth * 0.16;
+          final knobHeight = knobWidth * (173 / 235);
+final fullFillWidth = trackWidth * (grooveEnd - grooveStart);
+final fillHeight = trackHeight * 0.38;
+          final minPosition =
+              trackWidth * grooveStart + knobWidth / 2;
+
+          final maxPosition =
+              trackWidth * grooveEnd - knobWidth / 2;
+
+          final knobCenter = minPosition +
+              (maxPosition - minPosition) * volume;
+
+          final fillWidth =
+              (knobCenter - trackWidth * grooveStart).clamp(
+            0.0,
+            trackWidth * (grooveEnd - grooveStart),
+          );
+
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+          
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+
+              onPanDown: (details) {
+                setState(() {
+                  sliderIsPressed = true;
+                });
+
+                updateVolume(
+                  details.localPosition.dx,
+                  trackWidth,
+                );
+              },
+
+              onPanUpdate: (details) {
+                updateVolume(
+                  details.localPosition.dx,
+                  trackWidth,
+                );
+              },
+
+              onPanEnd: (_) {
+                setState(() {
+                  sliderIsPressed = false;
+                });
+              },
+
+              onPanCancel: () {
+                setState(() {
+                  sliderIsPressed = false;
+                });
+              },
+
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+
+                  // Background track.
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 0.5,
+                      child: Image.asset(
+                        'assets/volarea.png',
+                        fit: BoxFit.fill,
+                      ),
+                    ),
+                  ),
+
+                  // Cyan volume fill.
+                  // Cyan volume fill.
+
+  Positioned(
+  left: trackWidth * 0.22,  // Adjust horizontal position
+  top: trackHeight * 0.245,  
+  width: fillWidth,
+  height: fillHeight,
+  child: ClipRect(
+    child: OverflowBox(
+      alignment: Alignment.centerLeft,
+      minWidth: fullFillWidth,
+      maxWidth: fullFillWidth,
+      minHeight: fillHeight,
+      maxHeight: fillHeight,
+      child: Image.asset(
+        'assets/cyanfill.png',
+        width: fullFillWidth,
+        height: fillHeight,
+        fit: BoxFit.fill,
+      ),
+    ),
+  ),
+),
+
+
+
+                  // Draggable slider knob.
+                  // SLIDER KNOB.
+// SLIDER KNOB.
+// SLIDER KNOB.
+Positioned(
+  left: knobCenter - knobWidth / 2 + trackWidth * 0.00,
+  top: (trackHeight - knobHeight) / 2 + trackHeight * -0.052,
+  width: knobWidth * 0.98,
+  height: knobHeight * 0.98,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) {
+      setState(() {
+        sliderIsHovered = true;
+      });
+    },
+    onExit: (_) {
+      setState(() {
+        sliderIsHovered = false;
+      });
+    },
+    child: Image.asset(
+      sliderButtonImage,
+      fit: BoxFit.contain,
+    ),
+  ),
+),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  ),
+),
+
+
 Positioned(
   left: w * -0.04,
   top: h * 0.426,
@@ -457,19 +647,90 @@ Positioned(
 ),
 
                 // Song title.
-                Positioned(
-                  left: w * 0.35,
-                  top: h * 0.31,
-                  width: w * 0.50,
-                  child: Text(
-                    'Space Song',
-                    style: TextStyle(
-                      color: const Color.fromARGB(255, 38, 38, 38),
-                      fontSize: songFontSize,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
+                // Song title.
+Positioned(
+  left: w * 0.27,
+  top: h * 0.49,
+  width: w * 0.4,
+
+  child: Align(
+    alignment: Alignment.centerLeft,
+    child: Text(
+      'The Man - Taylor Swift',
+      maxLines: 1,
+      softWrap: false,
+      textAlign: TextAlign.left,
+      style: TextStyle(
+        fontFamily: 'digital',
+        color: const Color(0xFF94FFFF),
+        fontSize: songFontSize,
+        fontStyle: FontStyle.italic,
+
+        shadows: [
+          Shadow(
+            color: const Color(0xFF00FFFF).withOpacity(0.8),
+            blurRadius: 8,
+          ),
+          Shadow(
+            color: const Color(0xFF00FFFF).withOpacity(0.4),
+            blurRadius: 16,
+          ),
+          Shadow(
+            color: const Color(0xFF00FFFF).withOpacity(0.2),
+            blurRadius: 25,
+          ),
+        ],
+      ),
+    ),
+  ),
+),
+
+// Live 32-band equaliser, positioned to the right of the song title.
+Positioned(
+  left: w * 0.695,
+  top: h * 0.475,
+  width: w * 0.245,
+  height: h * 0.135,
+  child: IgnorePointer(
+    child: Opacity(
+      opacity: isPowerOn ? 1.0 : 0.0,
+      child: ValueListenableBuilder<List<double>>(
+        valueListenable: streamingService.equaliserBands,
+        builder: (context, bands, child) {
+          return CustomPaint(
+            painter: _EqualiserPainter(bands),
+            size: Size.infinite,
+          );
+        },
+      ),
+    ),
+  ),
+),
+
+Positioned(
+  left: w* 0.28,
+  top: h * 0.41,
+  width: w,
+  child: Align(
+    alignment: Alignment.centerLeft,
+    child: Text(
+      'SASHA.FM ◕ ‿-｡︻デ┳═ー',
+      style: TextStyle(
+        color: const Color(0xFF94FFFF),
+        fontSize: stationFontSize,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'retro',
+        shadows: [
+          Shadow(
+            color: const Color(0xFF00FFFF),
+            blurRadius: 3,
+          ),
+        ],
+      ),
+    ),
+  ),
+),
+
 
                 // Close window button.
                 Positioned(
@@ -635,7 +896,7 @@ Positioned(
 
                 // Equaliser button.
                 Positioned(
-                  left: w * 0.692,
+                  right: w * 0.675,
                   top: h * 0.78,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
@@ -759,5 +1020,54 @@ Positioned(
         },
       ),
     );
+  }
+}
+
+
+// Draws the 32 frequency levels received from the C++ broadcaster.
+class _EqualiserPainter extends CustomPainter {
+  _EqualiserPainter(this.bands);
+
+  final List<double> bands;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (bands.isEmpty || size.width <= 0 || size.height <= 0) return;
+
+    const barCount = 32;
+    final gap = size.width * 0.012;
+    final barWidth = (size.width - gap * (barCount - 1)) / barCount;
+    final maxBarHeight = size.height * 0.92;
+    final minBarHeight = size.height * 0.055;
+
+    final glowPaint = Paint()
+      ..color = const Color(0xFF94FFFF)
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+
+    final crispPaint = Paint()
+      ..color = const Color(0xFFBFFFFF)
+      ..style = PaintingStyle.fill;
+
+    for (var i = 0; i < barCount; i++) {
+      final rawValue = i < bands.length ? bands[i] : 0.0;
+      final level = rawValue.clamp(0.0, 1.0).toDouble();
+      final barHeight = minBarHeight +
+          (maxBarHeight - minBarHeight) * level;
+      final x = i * (barWidth + gap);
+      final y = size.height - barHeight;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth, barHeight),
+        Radius.circular(barWidth * 0.35),
+      );
+
+      canvas.drawRRect(rect, glowPaint);
+      canvas.drawRRect(rect, crispPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _EqualiserPainter oldDelegate) {
+    return !identical(oldDelegate.bands, bands);
   }
 }
