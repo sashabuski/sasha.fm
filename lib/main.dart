@@ -138,6 +138,31 @@ bool volumeIsPressed = false;
 bool isMuted = false;
 
 double previousVolume = 0.7;
+
+// MASCOT FLICKER SETTINGS
+
+// MASCOT FLICKER SETTINGS
+
+// Flicker chance on each check.
+double flickerChance = 1.0;
+
+// Time between flicker checks.
+int flickerCheckMinMs = 300;
+int flickerCheckMaxMs = 600;
+
+// Duration of each flicker.
+int flickerDurationMinMs = 80;
+int flickerDurationMaxMs = 180;
+
+// Opacity during a flicker.
+double flickerMinOpacity = 0.0;
+double flickerMaxOpacity = 0.15;
+
+final math.Random _flickerRandom = math.Random();
+
+Timer? _mascotFlickerTimer;
+
+double mascotFlickerOpacity = 1.0;
   // LiveKit streaming service.
   late final StreamingService streamingService;
 late AnimationController mascotController;
@@ -222,6 +247,68 @@ _clockTimer = Timer.periodic(
   ]).animate(mascotController);
 }
 
+void _startMascotFlicker() {
+  _mascotFlickerTimer?.cancel();
+  mascotFlickerOpacity = 1.0;
+  _scheduleMascotFlicker();
+}
+
+void _scheduleMascotFlicker() {
+  if (!mounted || !isPowerOn) return;
+
+  final waitMs = flickerCheckMinMs +
+      _flickerRandom.nextInt(
+        flickerCheckMaxMs - flickerCheckMinMs + 1,
+      );
+
+  _mascotFlickerTimer = Timer(
+    Duration(milliseconds: waitMs),
+    () {
+      if (!mounted || !isPowerOn) return;
+
+      if (_flickerRandom.nextDouble() < flickerChance) {
+        final flickerOpacity = flickerMinOpacity +
+            _flickerRandom.nextDouble() *
+                (flickerMaxOpacity - flickerMinOpacity);
+
+        setState(() {
+          mascotFlickerOpacity = flickerOpacity;
+        });
+
+        final durationMs = flickerDurationMinMs +
+            _flickerRandom.nextInt(
+              flickerDurationMaxMs - flickerDurationMinMs + 1,
+            );
+
+        _mascotFlickerTimer = Timer(
+          Duration(milliseconds: durationMs),
+          () {
+            if (!mounted) return;
+
+            setState(() {
+              mascotFlickerOpacity = 1.0;
+            });
+
+            _scheduleMascotFlicker();
+          },
+        );
+      } else {
+        _scheduleMascotFlicker();
+      }
+    },
+  );
+}
+
+void _stopMascotFlicker() {
+  _mascotFlickerTimer?.cancel();
+  _mascotFlickerTimer = null;
+
+  if (mounted) {
+    setState(() {
+      mascotFlickerOpacity = 1.0;
+    });
+  }
+}
 Future<void> _updateBattery() async {
   try {
     final level = await _battery.batteryLevel;
@@ -301,7 +388,7 @@ void _updateClock() {
       isPowerOn = false;
       isListening = false;
     });
-
+_stopMascotFlicker();
     mascotController.reset();
 
     await streamingService.disconnect();
@@ -311,7 +398,7 @@ void _updateClock() {
     setState(() {
       isPowerOn = true;
     });
-
+  _startMascotFlicker();
     // Start mascot flicker animation.
     mascotController.forward(from: 0);
 
@@ -336,7 +423,7 @@ void _updateClock() {
         isPowerOn = false;
         isListening = false;
       });
-
+      _stopMascotFlicker();
       mascotController.reset();
 
     } finally {
@@ -454,6 +541,7 @@ void dispose() {
   _wifiRefreshTimer.cancel();
 _batteryStateSubscription?.cancel();
 _clockTimer.cancel();
+_mascotFlickerTimer?.cancel();
   unawaited(streamingService.dispose());
   super.dispose();
 }
@@ -678,13 +766,16 @@ String get eqButtonImage {
   width: w * 0.4,
   height: h * 0.4,
   child: AnimatedBuilder(
-    animation: mascotOpacity,
-    builder: (context, child) {
-      return Opacity(
-        opacity: isPowerOn ? mascotOpacity.value : 0.0,
-        child: child,
-      );
-    },
+  animation: mascotOpacity,
+  builder: (context, child) {
+    return Opacity(
+      opacity: isPowerOn
+          ? (mascotOpacity.value * mascotFlickerOpacity)
+              .clamp(0.0, 1.0)
+          : 0.0,
+      child: child,
+    );
+  },
     child: Image.asset(
       'assets/chosenMascot.png',
       fit: BoxFit.contain,
@@ -973,6 +1064,8 @@ Positioned(
   left: w * 0.26,
   top: h * 0.495,
   width: w * 0.41,
+  child: Opacity(
+  opacity: 0.75,
   child: ScrollingSongTitle(
     title: 'The Man - Taylor Swift',
     style: TextStyle(
@@ -996,6 +1089,7 @@ Positioned(
       ],
     ),
   ),
+  ),
 ),
 
 
@@ -1007,7 +1101,7 @@ Positioned(
   height: h * 0.135,
   child: IgnorePointer(
     child: Opacity(
-      opacity: isPowerOn ? 1.0 : 0.0,
+      opacity: isPowerOn ? 0.75 : 0.0,
       
       child: ValueListenableBuilder<List<double>>(
         valueListenable: streamingService.equaliserBands,
@@ -1028,6 +1122,8 @@ Positioned(
   width: w,
   child: Align(
     alignment: Alignment.centerLeft,
+    child: Opacity(
+  opacity: 0.75,
     child: Text(
       'SASHA.FM ◕ ‿-｡︻デ┳═ー',
       style: TextStyle(
@@ -1042,6 +1138,7 @@ Positioned(
           ),
         ],
       ),
+    ),
     ),
   ),
 ),
@@ -1162,10 +1259,13 @@ if (isPowerOn)
 Positioned(
   right: w * 0.146,
   top: h * 0.39,
+  child: Opacity(
+    opacity:0.75,
   child: WifiIcon(
     signal: _wifiSignal,
     connected: _wifiConnected,
     size: h * 0.048,
+  ),
   ),
 ),
 // BATTERY INDICATOR
@@ -1174,9 +1274,13 @@ if (isPowerOn)
 Positioned(
   right: w * 0.18,
   top: h * 0.39,
+  child: Opacity(
+    opacity:0.75,
+  
   child: BatteryIcon(
     level: _batteryLevel,
     size: h * 0.05,
+  ),
   ),
 ),
 
@@ -1185,6 +1289,8 @@ if (isPowerOn)
 Positioned(
   right: w * 0.084,
   top: h * 0.36,
+  child: Opacity(
+    opacity:0.75,
   child: Text(
     _currentTime,
     style: TextStyle(
@@ -1203,6 +1309,7 @@ Positioned(
         ),
       ],
     ),
+  ),
   ),
 ),
 
@@ -1260,7 +1367,7 @@ Positioned(
                 // Equaliser button.
                 Positioned(
                   right: w * 0.675,
-                  top: h * 0.78,
+                  top: h * 0.781,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) {
