@@ -132,6 +132,12 @@ late Timer _batteryRefreshTimer;
 StreamSubscription<BatteryState>? _batteryStateSubscription;
 bool sliderIsHovered = false;
 bool sliderIsPressed = false;
+bool sliderDragStarted = false;
+bool volumeIsHovered = false;
+bool volumeIsPressed = false;
+bool isMuted = false;
+
+double previousVolume = 0.7;
   // LiveKit streaming service.
   late final StreamingService streamingService;
 late AnimationController mascotController;
@@ -358,7 +364,29 @@ void updateVolume(double pointerX, double trackWidth) {
       .clamp(0.0, 1.0);
 
   setState(() {
-    volume = newVolume;
+  volume = newVolume;
+
+  isMuted = newVolume <= 0.001;
+
+  if (!isMuted) {
+    previousVolume = newVolume;
+  }
+});
+}
+
+void toggleMute() {
+  setState(() {
+    if (isMuted) {
+      volume = previousVolume;
+      isMuted = false;
+    } else {
+      if (volume > 0) {
+        previousVolume = volume;
+      }
+
+      volume = 0;
+      isMuted = true;
+    }
   });
 }
 
@@ -442,41 +470,131 @@ String get sliderButtonImage {
   return 'assets/sliderbut.png';
 }
 
-  String get minButtonImage {
+String get volumeButtonImage {
+  // DEVICE OFF — muted lavender icons.
+  if (!isPowerOn) {
+    if (isMuted) {
+      if (volumeIsPressed) {
+        return 'assets/offmutebutpressed.png';
+      }
+
+      if (volumeIsHovered) {
+        return 'assets/offmutebuthovered.png';
+      }
+
+      return 'assets/offmutebut.png';
+    }
+
+    if (volumeIsPressed) {
+      return 'assets/offvolbutpressed.png';
+    }
+
+    if (volumeIsHovered) {
+      return 'assets/offvolbuthovered.png';
+    }
+
+    return 'assets/offvolbut.png';
+  }
+
+  // DEVICE ON — cyan icons.
+  if (isMuted) {
+    if (volumeIsPressed) {
+      return 'assets/onmutebutpressed.png';
+    }
+
+    if (volumeIsHovered) {
+      return 'assets/onmutebuthovered.png';
+    }
+
+    return 'assets/onmutebut.png';
+  }
+
+  if (volumeIsPressed) {
+    return 'assets/onvolpressed.png';
+  }
+
+  if (volumeIsHovered) {
+    return 'assets/onvolhovered.png';
+  }
+
+  return 'assets/onvol.png';
+}
+
+String get minButtonImage {
+  // DEVICE ON — coloured cyan states.
+  if (isPowerOn) {
     if (isMinPressed) {
-      return 'assets/min_pressed.png';
+      return 'assets/on_min_pressed.png';
     }
 
     if (isMinHovered) {
-      return 'assets/min_hover.png';
+      return 'assets/on_min_hover.png';
     }
-
-    return 'assets/min.png';
   }
+
+  // DEVICE OFF — original lavender states.
+  if (isMinPressed) {
+    return 'assets/min_pressed.png';
+  }
+
+  if (isMinHovered) {
+    return 'assets/min_hover.png';
+  }
+
+  return 'assets/min.png';
+}
+
 
   // Determine which close button image should be displayed.
   String get xButtonImage {
+  // DEVICE ON — coloured states.
+  if (isPowerOn) {
     if (xIsPressed) {
-      return 'assets/xbut_pressed.png';
+      return 'assets/onyxbut_pressed.png';
     }
 
     if (xIsHovered) {
-      return 'assets/xbut_hover.png';
+      return 'assets/onyxbut_hovered.png';
+    }
+  }
+
+  // DEVICE OFF — original purple states.
+  if (xIsPressed) {
+    return 'assets/xbut_pressed.png';
+  }
+
+  if (xIsHovered) {
+    return 'assets/xbut_hover.png';
+  }
+
+  return 'assets/xbut.png';
+}
+  
+
+String get windowButtonImage {
+  // DEVICE ON.
+  if (isPowerOn) {
+    if (windowIsPressed) {
+      return 'assets/onwindowbutpressed.png';
     }
 
-    return 'assets/xbut.png';
+    if (windowIsHovered) {
+      return 'assets/onwindowbuthovered.png';
+    }
   }
-  String get windowButtonImage {
+
+  // DEVICE OFF.
   if (windowIsPressed) {
-    return 'assets/WINDOWBUTPRESSED.png';
+    return 'assets/windowbutpressed.png';
   }
 
   if (windowIsHovered) {
-    return 'assets/WINDOWBUTHOVERED.png';
+    return 'assets/windowbuthovered.png';
   }
 
-  return 'assets/WINDOWBUT.png';
+  return 'assets/windowbut.png';
 }
+
 
   // Determine which image should currently be displayed.
   String get onButtonImage {
@@ -492,13 +610,22 @@ String get sliderButtonImage {
   return 'assets/onbutdefault.png';
 }
 
-  String get eqButtonImage {
-  // Device OFF.
+ 
+String get eqButtonImage {
+  // DEVICE OFF — lavender states.
   if (!isPowerOn) {
+    if (eqIsPressed) {
+      return 'assets/eqbutoffpressed.png';
+    }
+
+    if (eqIsHovered) {
+      return 'assets/eqbutoffhovered.png';
+    }
+
     return 'assets/eqbutoff.png';
   }
 
-  // Device ON.
+  // DEVICE ON — cyan states.
   if (eqIsPressed) {
     return 'assets/eqbut_pressed.png';
   }
@@ -509,6 +636,7 @@ String get sliderButtonImage {
 
   return 'assets/eqbut.png';
 }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -620,16 +748,16 @@ final fillHeight = trackHeight * 0.38;
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
 
-              onPanDown: (details) {
-                setState(() {
-                  sliderIsPressed = true;
-                });
+             onPanStart: (details) {
+  setState(() {
+    sliderIsPressed = true;
+  });
 
-                updateVolume(
-                  details.localPosition.dx,
-                  trackWidth,
-                );
-              },
+  updateVolume(
+    details.localPosition.dx,
+    trackWidth,
+  );
+},
 
               onPanUpdate: (details) {
                 updateVolume(
@@ -665,6 +793,68 @@ final fillHeight = trackHeight * 0.38;
                     ),
                   ),
 
+
+// VOLUME MUTE BUTTON.
+Positioned(
+  left: w * 0.012,
+  top: w * -0.001,
+  width: trackWidth * 0.18,
+  height: trackHeight,
+  child: MouseRegion(
+    cursor: SystemMouseCursors.click,
+
+    onEnter: (_) {
+      setState(() {
+        volumeIsHovered = true;
+      });
+    },
+
+    onExit: (_) {
+      setState(() {
+        volumeIsHovered = false;
+        volumeIsPressed = false;
+      });
+    },
+
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+
+      onTapDown: (_) {
+        setState(() {
+          volumeIsPressed = true;
+        });
+      },
+
+      onTapUp: (_) {
+        setState(() {
+          volumeIsPressed = false;
+        });
+      },
+
+      onTapCancel: () {
+        setState(() {
+          volumeIsPressed = false;
+        });
+      },
+
+      onTap: toggleMute,
+
+      child: Center(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 100),
+
+          child: Image.asset(
+            volumeButtonImage,
+            key: ValueKey(volumeButtonImage),
+            width: trackWidth * 0.105,
+            height: trackHeight * 0.58,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    ),
+  ),
+),
                   // Cyan volume fill.
                   // Cyan volume fill.
 
@@ -681,11 +871,13 @@ final fillHeight = trackHeight * 0.38;
       minHeight: fillHeight,
       maxHeight: fillHeight,
       child: Image.asset(
-        'assets/cyanfill.png',
-        width: fullFillWidth,
-        height: fillHeight,
-        fit: BoxFit.fill,
-      ),
+  isPowerOn
+      ? 'assets/cyanfill.png'
+      : 'assets/cyanfilloff.png',
+  width: fullFillWidth,
+  height: fillHeight,
+  fit: BoxFit.fill,
+),
     ),
   ),
 ),
@@ -776,7 +968,7 @@ Positioned(
 
                 // Song title.
                 // Song title.
-
+if (isPowerOn)
 Positioned(
   left: w * 0.26,
   top: h * 0.495,
@@ -815,8 +1007,8 @@ Positioned(
   height: h * 0.135,
   child: IgnorePointer(
     child: Opacity(
-      //opacity: isPowerOn ? 1.0 : 0.0,
-      opacity: 1.0,
+      opacity: isPowerOn ? 1.0 : 0.0,
+      
       child: ValueListenableBuilder<List<double>>(
         valueListenable: streamingService.equaliserBands,
         builder: (context, bands, child) {
@@ -829,7 +1021,7 @@ Positioned(
     ),
   ),
 ),
-
+if (isPowerOn)
 Positioned(
   left: w * 0.263,
   top: h * 0.362,
@@ -857,8 +1049,8 @@ Positioned(
 
                 // Close window button.
                 Positioned(
-                  right: w * 0.085,
-                  top: h * 0.189,
+                  right: w * 0.083,
+                  top: h * 0.186,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     onEnter: (_) {
@@ -898,7 +1090,7 @@ Positioned(
                         child: Image.asset(
                           xButtonImage,
                           key: ValueKey(xButtonImage),
-                          height: h * 0.102,
+                          height: h * 0.112,
                           fit: BoxFit.contain,
                         ),
                       ),
@@ -909,7 +1101,7 @@ Positioned(
 
 // Window maximise / restore button.
 Positioned(
-  left: w * 0.825,
+  left: w * 0.827,
   top: h * 0.188,
   child: MouseRegion(
     cursor: SystemMouseCursors.click,
@@ -956,7 +1148,7 @@ Positioned(
         child: Image.asset(
           windowButtonImage,
           key: ValueKey(windowButtonImage),
-          height: h * 0.102,
+          height: h * 0.106,
           fit: BoxFit.contain,
         ),
       ),
@@ -966,6 +1158,7 @@ Positioned(
 
 // WI-FI INDICATOR
 // WI-FI INDICATOR
+if (isPowerOn)
 Positioned(
   right: w * 0.146,
   top: h * 0.39,
@@ -977,6 +1170,7 @@ Positioned(
 ),
 // BATTERY INDICATOR
 // BATTERY INDICATOR
+if (isPowerOn)
 Positioned(
   right: w * 0.18,
   top: h * 0.39,
@@ -987,6 +1181,7 @@ Positioned(
 ),
 
 // DEVICE CLOCK
+if (isPowerOn)
 Positioned(
   right: w * 0.084,
   top: h * 0.36,
@@ -1105,7 +1300,7 @@ Positioned(
                         child: Image.asset(
                           eqButtonImage,
                           key: ValueKey(eqButtonImage),
-                          width: w * 0.08,
+                          width: w * 0.085,
                           fit: BoxFit.contain,
                         ),
                       ),

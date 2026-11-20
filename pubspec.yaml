@@ -67,8 +67,27 @@ flutter:
     - assets/sliderbut.png
     - assets/sliderbuthovered.png
     - assets/sliderbutpressed.png
-
-
+    - assets/onvol.png
+    - assets/onvolhovered.png
+    - assets/onvolpressed.png
+    - assets/onmutebut.png
+    - assets/onmutebuthovered.png
+    - assets/onmutebutpressed.png
+    - assets/offmutebut.png
+    - assets/offmutebuthovered.png
+    - assets/offmutebutpressed.png
+    - assets/offvolbut.png
+    - assets/offvolbuthovered.png
+    - assets/offvolbutpressed.png
+    - assets/cyanfilloff.png
+    - assets/eqbutoffhovered.png
+    - assets/eqbutoffpressed.png
+    - assets/on_min_hover.png
+    - assets/on_min_pressed.png
+    - assets/onwindowbuthovered.png
+    - assets/onwindowbutpressed.png
+    - assets/onyxbut_hovered.png
+    - assets/onyxbut_pressed.png
   fonts:
     - family: digital
       fonts:
