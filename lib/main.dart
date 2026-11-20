@@ -1,12 +1,12 @@
 
 import 'dart:async';
 import 'dart:math' as math;
-
+import 'dart:io';
 import 'package:desktop_music_player/services/streaming_service.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
-
+import 'package:battery_plus/battery_plus.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -118,6 +118,18 @@ bool windowIsPressed = false;
   bool isMinPressed = false;
 double volume = 0.7;
 
+// Wi-Fi monitoring.
+int? _wifiSignal;
+bool _wifiConnected = false;
+late Timer _wifiRefreshTimer;
+
+late final Battery _battery;
+
+int? _batteryLevel;
+
+late Timer _batteryRefreshTimer;
+
+StreamSubscription<BatteryState>? _batteryStateSubscription;
 bool sliderIsHovered = false;
 bool sliderIsPressed = false;
   // LiveKit streaming service.
@@ -127,9 +139,47 @@ late Animation<double> mascotOpacity;
   bool isConnecting = false;
   bool isListening = false;
 
+String _currentTime = '';
+
+late Timer _clockTimer;
   @override
 void initState() {
   super.initState();
+  // Initialise device clock.
+
+  // Initialise battery monitoring.
+_battery = Battery();
+
+// Get initial battery percentage.
+_updateBattery();
+
+// Refresh battery percentage every 30 seconds.
+_batteryRefreshTimer = Timer.periodic(
+  const Duration(seconds: 30),
+  (_) => _updateBattery(),
+);
+
+// Refresh when charging state changes.
+_batteryStateSubscription =
+    _battery.onBatteryStateChanged.listen((state) {
+  _updateBattery();
+});
+
+// Get initial Wi-Fi signal.
+_updateWifi();
+
+// Refresh Wi-Fi signal every 5 seconds.
+_wifiRefreshTimer = Timer.periodic(
+  const Duration(seconds: 5),
+  (_) => _updateWifi(),
+);
+_updateClock();
+
+// Refresh the displayed time every second.
+_clockTimer = Timer.periodic(
+  const Duration(seconds: 1),
+  (_) => _updateClock(),
+);
 
   streamingService = StreamingService();
 
@@ -166,6 +216,77 @@ void initState() {
   ]).animate(mascotController);
 }
 
+Future<void> _updateBattery() async {
+  try {
+    final level = await _battery.batteryLevel;
+
+    if (!mounted) return;
+
+    if (_batteryLevel != level) {
+      setState(() {
+        _batteryLevel = level;
+      });
+    }
+  } catch (e) {
+   // debugPrint('Battery check failed: $e');
+  }
+}
+Future<void> _updateWifi() async {
+  try {
+    final result = await Process.run(
+      'netsh',
+      ['wlan', 'show', 'interfaces'],
+    );
+
+    final output = result.stdout.toString();
+//debugPrint('WIFI OUTPUT:\n$output');
+//debugPrint('WIFI ERROR:\n${result.stderr}');
+//debugPrint('WIFI EXIT CODE: ${result.exitCode}');
+    final stateMatch = RegExp(
+      r'^\s*State\s*:\s*(.+)$',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(output);
+
+    final signalMatch = RegExp(
+      r'^\s*Signal\s*:\s*(\d+)%',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(output);
+
+    final connected =
+        stateMatch?.group(1)?.trim().toLowerCase() == 'connected';
+
+    final signal = connected
+        ? int.tryParse(signalMatch?.group(1) ?? '')
+        : null;
+//debugPrint('WiFi connected: $connected | Signal: $signal');
+    if (!mounted) return;
+
+    if (_wifiConnected != connected || _wifiSignal != signal) {
+      setState(() {
+        _wifiConnected = connected;
+        _wifiSignal = signal;
+      });
+    }
+  } catch (e) {
+    //debugPrint('Wi-Fi check failed: $e');
+  }
+}
+
+void _updateClock() {
+  final now = DateTime.now();
+
+  final formattedTime =
+      '${now.hour.toString().padLeft(2, '0')}:'
+      '${now.minute.toString().padLeft(2, '0')}';
+
+  if (formattedTime != _currentTime && mounted) {
+    setState(() {
+      _currentTime = formattedTime;
+    });
+  }
+}
   // Connect or disconnect from the radio.
  Future<void> toggleListening() async {
   if (isPowerOn) {
@@ -200,7 +321,7 @@ void initState() {
       });
 
     } catch (e) {
-      debugPrint('Connection error: $e');
+      //debugPrint('Connection error: $e');
 
       if (!mounted) return;
 
@@ -301,6 +422,10 @@ Future<void> toggleWindowSize() async {
  @override
 void dispose() {
   mascotController.dispose();
+  _batteryRefreshTimer.cancel();
+  _wifiRefreshTimer.cancel();
+_batteryStateSubscription?.cancel();
+_clockTimer.cancel();
   unawaited(streamingService.dispose());
   super.dispose();
 }
@@ -394,8 +519,8 @@ String get sliderButtonImage {
           final h = constraints.maxHeight;
 
           // Scale interactive elements with window dimensions.
-          final songFontSize = h * 0.12;
-        final stationFontSize = h * 0.06;
+          final songFontSize = h * 0.122;
+        final stationFontSize = h * 0.10;
           final playButtonWidth = w * 0.24;
           final minButtonWidth = w * 0.047;
 
@@ -405,15 +530,18 @@ String get sliderButtonImage {
               children: [
                 // Background: radio artwork.
                 Positioned.fill(
-                  child: DragToMoveArea(
-                    child: Image.asset(
-                      'assets/player.png',
-                      fit: BoxFit.fill,
-                      width: double.infinity,
-                      height: double.infinity,
-                    ),
-                  ),
-                ),
+  child: DragToMoveArea(
+    child: Opacity(
+      opacity: 1.0, // 0.0 = invisible, 1.0 = fully opaque
+      child: Image.asset(
+        'assets/player.png',
+        fit: BoxFit.fill,
+        width: double.infinity,
+        height: double.infinity,
+      ),
+    ),
+  ),
+),
 
                 // Foreground: mascot.
           Positioned(
@@ -648,52 +776,47 @@ Positioned(
 
                 // Song title.
                 // Song title.
+
 Positioned(
-  left: w * 0.27,
-  top: h * 0.49,
-  width: w * 0.4,
-
-  child: Align(
-    alignment: Alignment.centerLeft,
-    child: Text(
-      'The Man - Taylor Swift',
-      maxLines: 1,
-      softWrap: false,
-      textAlign: TextAlign.left,
-      style: TextStyle(
-        fontFamily: 'digital',
-        color: const Color(0xFF94FFFF),
-        fontSize: songFontSize,
-        fontStyle: FontStyle.italic,
-
-        shadows: [
-          Shadow(
-            color: const Color(0xFF00FFFF).withOpacity(0.8),
-            blurRadius: 8,
-          ),
-          Shadow(
-            color: const Color(0xFF00FFFF).withOpacity(0.4),
-            blurRadius: 16,
-          ),
-          Shadow(
-            color: const Color(0xFF00FFFF).withOpacity(0.2),
-            blurRadius: 25,
-          ),
-        ],
-      ),
+  left: w * 0.26,
+  top: h * 0.495,
+  width: w * 0.41,
+  child: ScrollingSongTitle(
+    title: 'The Man - Taylor Swift',
+    style: TextStyle(
+      fontFamily: 'digital',
+      color: const Color(0xFF94FFFF),
+      fontSize: songFontSize,
+      fontStyle: FontStyle.italic,
+      shadows: [
+        Shadow(
+          color: const Color(0xFF00FFFF).withOpacity(0.8),
+          blurRadius: 8,
+        ),
+        Shadow(
+          color: const Color(0xFF00FFFF).withOpacity(0.4),
+          blurRadius: 16,
+        ),
+        Shadow(
+          color: const Color(0xFF00FFFF).withOpacity(0.2),
+          blurRadius: 25,
+        ),
+      ],
     ),
   ),
 ),
 
+
 // Live 32-band equaliser, positioned to the right of the song title.
 Positioned(
-  left: w * 0.695,
-  top: h * 0.475,
-  width: w * 0.245,
+  left: w * 0.69,
+  top: h * 0.49,
+  width: w * 0.22,
   height: h * 0.135,
   child: IgnorePointer(
     child: Opacity(
-      opacity: isPowerOn ? 1.0 : 0.0,
+      //opacity: isPowerOn ? 1.0 : 0.0,
+      opacity: 1.0,
       child: ValueListenableBuilder<List<double>>(
         valueListenable: streamingService.equaliserBands,
         builder: (context, bands, child) {
@@ -708,8 +831,8 @@ Positioned(
 ),
 
 Positioned(
-  left: w* 0.28,
-  top: h * 0.41,
+  left: w * 0.263,
+  top: h * 0.362,
   width: w,
   child: Align(
     alignment: Alignment.centerLeft,
@@ -719,7 +842,7 @@ Positioned(
         color: const Color(0xFF94FFFF),
         fontSize: stationFontSize,
         fontWeight: FontWeight.bold,
-        fontFamily: 'retro',
+        fontFamily: 'dot',
         shadows: [
           Shadow(
             color: const Color(0xFF00FFFF),
@@ -841,7 +964,52 @@ Positioned(
   ),
 ),
 
+// WI-FI INDICATOR
+// WI-FI INDICATOR
+Positioned(
+  right: w * 0.146,
+  top: h * 0.39,
+  child: WifiIcon(
+    signal: _wifiSignal,
+    connected: _wifiConnected,
+    size: h * 0.048,
+  ),
+),
+// BATTERY INDICATOR
+// BATTERY INDICATOR
+Positioned(
+  right: w * 0.18,
+  top: h * 0.39,
+  child: BatteryIcon(
+    level: _batteryLevel,
+    size: h * 0.05,
+  ),
+),
 
+// DEVICE CLOCK
+Positioned(
+  right: w * 0.084,
+  top: h * 0.36,
+  child: Text(
+    _currentTime,
+    style: TextStyle(
+      fontFamily: 'dot',
+      fontSize: h * 0.09,
+      color: const Color(0xFF94FFFF),
+      
+      shadows: [
+        Shadow(
+          color: const Color(0xFF00FFFF),
+          blurRadius: 8,
+        ),
+        Shadow(
+          color: const Color(0xFF00FFFF).withOpacity(0.4),
+          blurRadius: 16,
+        ),
+      ],
+    ),
+  ),
+),
 
                 // Minimise window button.
                 Positioned(
@@ -928,7 +1096,7 @@ Positioned(
                         });
                       },
                       onTap: () {
-                        debugPrint('EQUALISER BUTTON PRESSED');
+                       // debugPrint('EQUALISER BUTTON PRESSED');
                       },
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 120),
@@ -1024,7 +1192,242 @@ Positioned(
 }
 
 
+class BatteryIcon extends StatelessWidget {
+  const BatteryIcon({
+    super.key,
+    required this.level,
+    required this.size,
+  });
+
+  final int? level;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size * (38 / 24),
+      height: size,
+      child: CustomPaint(
+        painter: _BatteryPainter(level),
+      ),
+    );
+  }
+}
+class WifiIcon extends StatelessWidget {
+  final int? signal;
+  final bool connected;
+  final double size;
+
+  const WifiIcon({
+    super.key,
+    required this.signal,
+    required this.connected,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size * 1.5,
+      height: size,
+      child: CustomPaint(
+        painter: _WifiPainter(
+          signal: signal,
+          connected: connected,
+        ),
+      ),
+    );
+  }
+}
+
+class _WifiPainter extends CustomPainter {
+  final int? signal;
+  final bool connected;
+
+  _WifiPainter({
+    required this.signal,
+    required this.connected,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
+    canvas.save();
+    canvas.scale(size.width / 38, size.height / 30);
+
+    const cyan = Color(0xFF94FFFF);
+    const inactive = Color(0xFF35434A);
+
+    final strength = connected ? (signal ?? 0) : 0;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.8
+      ..strokeCap = StrokeCap.round;
+
+    final paths = [
+      Path()
+        ..moveTo(3, 9)
+        ..quadraticBezierTo(19, -4, 35, 9),
+
+      Path()
+        ..moveTo(9, 16)
+        ..quadraticBezierTo(19, 7, 29, 16),
+
+      Path()
+        ..moveTo(15, 23)
+        ..quadraticBezierTo(19, 19, 23, 23),
+    ];
+
+    // Outer, middle and inner arcs.
+    final thresholds = [70, 35, 1];
+
+    for (int i = 0; i < paths.length; i++) {
+      final active = connected && strength >= thresholds[i];
+
+      paint
+        ..color = active ? cyan : inactive
+        ..maskFilter = active
+            ? const MaskFilter.blur(BlurStyle.normal, 3)
+            : null;
+
+      canvas.drawPath(paths[i], paint);
+
+      // Crisp foreground line.
+      paint
+        ..maskFilter = null
+        ..color = active ? cyan : inactive;
+
+      canvas.drawPath(paths[i], paint);
+    }
+
+    // Signal dot.
+    final dotPaint = Paint()
+      ..color = connected ? cyan : inactive
+      ..maskFilter = connected
+          ? const MaskFilter.blur(BlurStyle.normal, 3)
+          : null;
+
+    canvas.drawCircle(
+      const Offset(19, 27),
+      2.2,
+      dotPaint,
+    );
+
+    dotPaint.maskFilter = null;
+
+    canvas.drawCircle(
+      const Offset(19, 27),
+      2.2,
+      dotPaint,
+    );
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _WifiPainter oldDelegate) {
+    return oldDelegate.signal != signal ||
+        oldDelegate.connected != connected;
+  }
+}
+class _BatteryPainter extends CustomPainter {
+  _BatteryPainter(this.level);
+
+  final int? level;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+  if (size.width <= 0 || size.height <= 0) return;
+
+  canvas.save();
+
+  // Scale the original 38 × 24 design to the widget dimensions.
+  canvas.scale(size.width / 38, size.height / 24);
+
+  const cyan = Color(0xFF94FFFF);
+
+    final outlinePaint = Paint()
+      ..color = cyan
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        2.0,
+      );
+
+    final crispOutline = Paint()
+      ..color = cyan
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+
+    final glowPaint = Paint()
+      ..color = cyan
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        3.0,
+      );
+
+    final fillPaint = Paint()
+      ..color = const Color(0xFFBFFFFF)
+      ..style = PaintingStyle.fill;
+
+    // Battery outer body.
+    final body = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(1, 3, 29, 18),
+      const Radius.circular(3),
+    );
+
+    // Battery terminal.
+    final terminal = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(30, 8, 4, 8),
+      const Radius.circular(1),
+    );
+
+    canvas.drawRRect(body, outlinePaint);
+    canvas.drawRRect(body, crispOutline);
+
+    canvas.drawRRect(terminal, outlinePaint);
+    canvas.drawRRect(terminal, crispOutline);
+
+    // Determine how many segments should illuminate.
+    final litSegments = level == null
+        ? 0
+        : (level! / 25).ceil().clamp(0, 4);
+
+    const segmentWidth = 4.5;
+    const segmentGap = 1.5;
+
+    // Draw four individual battery segments.
+    for (int i = 0; i < 4; i++) {
+      if (i >= litSegments) continue;
+
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          4 + i * (segmentWidth + segmentGap),
+          7,
+          segmentWidth,
+          10,
+        ),
+        const Radius.circular(0.8),
+      );
+
+      canvas.drawRRect(rect, glowPaint);
+      canvas.drawRRect(rect, fillPaint);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _BatteryPainter oldDelegate) {
+    return oldDelegate.level != level;
+  }
+}
+
 // Draws the 32 frequency levels received from the C++ broadcaster.
+
 class _EqualiserPainter extends CustomPainter {
   _EqualiserPainter(this.bands);
 
@@ -1032,42 +1435,292 @@ class _EqualiserPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (bands.isEmpty || size.width <= 0 || size.height <= 0) return;
+    if (size.width <= 0 || size.height <= 0) return;
 
-    const barCount = 32;
-    final gap = size.width * 0.012;
-    final barWidth = (size.width - gap * (barCount - 1)) / barCount;
-    final maxBarHeight = size.height * 0.92;
-    final minBarHeight = size.height * 0.055;
+    const barCount = 18;
+    const segmentCount = 7;
+
+    final horizontalGap = size.width * 0.018;
+    final barWidth =
+        (size.width - horizontalGap * (barCount - 1)) / barCount;
+
+    final segmentHeight = size.height * 0.085;
+    final verticalGap = size.height * 0.035;
 
     final glowPaint = Paint()
       ..color = const Color(0xFF94FFFF)
       ..style = PaintingStyle.fill
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+      ..maskFilter = const MaskFilter.blur(
+        BlurStyle.normal,
+        2.5,
+      );
 
     final crispPaint = Paint()
       ..color = const Color(0xFFBFFFFF)
       ..style = PaintingStyle.fill;
 
     for (var i = 0; i < barCount; i++) {
-      final rawValue = i < bands.length ? bands[i] : 0.0;
-      final level = rawValue.clamp(0.0, 1.0).toDouble();
-      final barHeight = minBarHeight +
-          (maxBarHeight - minBarHeight) * level;
-      final x = i * (barWidth + gap);
-      final y = size.height - barHeight;
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barWidth, barHeight),
-        Radius.circular(barWidth * 0.35),
-      );
 
-      canvas.drawRRect(rect, glowPaint);
-      canvas.drawRRect(rect, crispPaint);
+      double level = 0.0;
+
+      // Read incoming audio if available.
+      if (bands.isNotEmpty) {
+        final start = (i * bands.length / barCount).floor();
+
+        final end = (((i + 1) * bands.length / barCount).ceil())
+            .clamp(start + 1, bands.length)
+            .toInt();
+
+        double total = 0;
+
+        for (var j = start; j < end; j++) {
+          total += bands[j];
+        }
+
+        level = (total / (end - start))
+            .clamp(0.0, 1.0)
+            .toDouble();
+      }
+
+      // Always illuminate at least the bottom segment.
+      final litSegments = (level * (segmentCount - 1))
+              .ceil()
+              .clamp(0, segmentCount - 1)
+              .toInt() + 1;
+
+      final x = i * (barWidth + horizontalGap);
+
+      // Draw segments from bottom upwards.
+      for (var j = 0; j < litSegments; j++) {
+        final y = size.height -
+            segmentHeight -
+            j * (segmentHeight + verticalGap);
+
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            x,
+            y,
+            barWidth,
+            segmentHeight,
+          ),
+          const Radius.circular(1.2),
+        );
+
+        canvas.drawRRect(rect, glowPaint);
+        canvas.drawRRect(rect, crispPaint);
+      }
     }
   }
 
   @override
   bool shouldRepaint(covariant _EqualiserPainter oldDelegate) {
     return !identical(oldDelegate.bands, bands);
+  }
+}
+
+
+
+class ScrollingSongTitle extends StatefulWidget {
+  const ScrollingSongTitle({
+    super.key,
+    required this.title,
+    required this.style,
+  });
+
+  final String title;
+  final TextStyle style;
+
+  @override
+  State<ScrollingSongTitle> createState() =>
+      _ScrollingSongTitleState();
+}
+
+class _ScrollingSongTitleState extends State<ScrollingSongTitle>
+    with SingleTickerProviderStateMixin {
+
+  late final AnimationController _controller;
+
+  Animation<double>? _offsetAnimation;
+
+  double _lastCycleDistance = -1;
+  String _lastTitle = '';
+
+  static const double gap = 55.0;
+  static const double scrollSpeed = 35.0;
+  //static const int pauseMilliseconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  
+void _configureAnimation(double textWidth) {
+  final cycleDistance = textWidth + gap;
+
+  if (_lastTitle == widget.title &&
+      _lastCycleDistance == cycleDistance &&
+      _offsetAnimation != null) {
+    return;
+  }
+
+  _lastTitle = widget.title;
+  _lastCycleDistance = cycleDistance;
+
+  final scrollMilliseconds =
+      (cycleDistance / scrollSpeed * 1000).round();
+
+  _controller.duration = Duration(
+    milliseconds: scrollMilliseconds,
+  );
+
+  _offsetAnimation = Tween<double>(
+    begin: 0,
+    end: cycleDistance,
+  ).animate(_controller);
+
+  _controller.repeat();
+}
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+
+        final textPainter = TextPainter(
+          text: TextSpan(
+            text: widget.title,
+            style: widget.style,
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        );
+
+        textPainter.layout();
+
+      
+final textWidth = textPainter.width;
+final textHeight = textPainter.height;
+
+// Reserve extra room for italic font overhang and glow.
+const edgeSafety = 30.0;
+
+final availableTextWidth =
+    (constraints.maxWidth - edgeSafety).clamp(
+      0.0,
+      constraints.maxWidth,
+    );
+
+//debugPrint(
+  //'Song width: $textWidth | '
+ // 'Available width: ${constraints.maxWidth} | '
+ // 'Scroll threshold: $availableTextWidth',
+//);
+
+// Only keep stationary when there is plenty of room.
+if (textWidth <= availableTextWidth) {
+  if (_controller.isAnimating) {
+    _controller.stop();
+    _controller.value = 0;
+  }
+
+  _lastTitle = widget.title;
+  _lastCycleDistance = -1;
+  _offsetAnimation = null;
+
+  return SizedBox(
+    width: constraints.maxWidth,
+    height: textHeight,
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        widget.title,
+        maxLines: 1,
+        softWrap: false,
+        style: widget.style,
+      ),
+    ),
+  );
+}
+
+
+        _configureAnimation(textWidth);
+
+        final cycleDistance = textWidth + gap;
+
+        return SizedBox(
+          width: constraints.maxWidth,
+          height: textHeight,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+
+                final offset =
+    _offsetAnimation?.value ?? 0.0;
+
+                return CustomPaint(
+                  size: Size(
+                    constraints.maxWidth,
+                    textHeight,
+                  ),
+                  painter: _DualMarqueePainter(
+                    textPainter: textPainter,
+                    offset: offset,
+                    cycleDistance: cycleDistance,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DualMarqueePainter extends CustomPainter {
+  _DualMarqueePainter({
+    required this.textPainter,
+    required this.offset,
+    required this.cycleDistance,
+  });
+
+  final TextPainter textPainter;
+  final double offset;
+  final double cycleDistance;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+
+    // First copy.
+    textPainter.paint(
+      canvas,
+      Offset(-offset, 0),
+    );
+
+    // Second identical copy.
+    textPainter.paint(
+      canvas,
+      Offset(-offset + cycleDistance, 0),
+    );
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _DualMarqueePainter oldDelegate,
+  ) {
+    return oldDelegate.offset != offset ||
+        oldDelegate.cycleDistance != cycleDistance ||
+        oldDelegate.textPainter.text != textPainter.text;
   }
 }

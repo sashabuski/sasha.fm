@@ -17,6 +17,7 @@ dependencies:
   screen_retriever: ^0.2.2
   livekit_client: 2.10.0
   http: ^1.6.0
+  battery_plus: ^7.1.2
 
 dev_dependencies:
   flutter_test:
@@ -76,3 +77,7 @@ flutter:
     - family: retro
       fonts:
         - asset: assets/fonts/retro.ttf
+    - family: dot
+      fonts:
+        - asset: assets/fonts/lcddot.ttf
+        
