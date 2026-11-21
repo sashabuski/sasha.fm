@@ -101,7 +101,7 @@ class RadioScreen extends StatefulWidget {
 }
 
 class _RadioScreenState extends State<RadioScreen>
-    with SingleTickerProviderStateMixin {  // Play button interaction states.
+    with TickerProviderStateMixin {  // Play button interaction states.
   bool isHovered = false;
   bool isPressed = false;
 
@@ -130,85 +130,86 @@ int? _batteryLevel;
 late Timer _batteryRefreshTimer;
 
 StreamSubscription<BatteryState>? _batteryStateSubscription;
-bool sliderIsHovered = false;
-bool sliderIsPressed = false;
-bool sliderDragStarted = false;
-bool volumeIsHovered = false;
-bool volumeIsPressed = false;
-bool isMuted = false;
+  bool sliderIsHovered = false;
+  bool sliderIsPressed = false;
+  bool sliderDragStarted = false;
+  bool volumeIsHovered = false;
+  bool volumeIsPressed = false;
+  bool isMuted = false;
 
-double previousVolume = 0.7;
+  double previousVolume = 0.7;
 
-// MASCOT FLICKER SETTINGS
+  // MASCOT FLICKER SETTINGS
 
-// MASCOT FLICKER SETTINGS
-// MASCOT FLICKER SETTINGS
+  // MASCOT FLICKER SETTINGS
+  // MASCOT FLICKER SETTINGS
 
-// Time between flickers.
-int flickerCheckMinMs = 8000;
-int flickerCheckMaxMs = 12000;
+  // Time between flickers.
+  int flickerCheckMinMs = 8000;
+  int flickerCheckMaxMs = 12000;
 
-// Duration of each flicker.
-int flickerDurationMinMs = 30;
-int flickerDurationMaxMs = 70;
+  // Duration of each flicker.
+  int flickerDurationMinMs = 30;
+  int flickerDurationMaxMs = 70;
 
-// Opacity during a flicker.
-double flickerMinOpacity = 0.0;
-double flickerMaxOpacity = 0.1;
+  // Opacity during a flicker.
+  double flickerMinOpacity = 0.0;
+  double flickerMaxOpacity = 0.1;
 
-final math.Random _flickerRandom = math.Random();
+  final math.Random _flickerRandom = math.Random();
 
-Timer? _mascotFlickerTimer;
+  Timer? _mascotFlickerTimer;
 
-double mascotFlickerOpacity = 1.0;
-  // LiveKit streaming service.
-  late final StreamingService streamingService;
-late AnimationController mascotController;
-late Animation<double> mascotOpacity;
-  bool isConnecting = false;
-  bool isListening = false;
+  double mascotFlickerOpacity = 1.0;
+    // LiveKit streaming service.
+    late final StreamingService streamingService;
+  late AnimationController mascotController;
+  late Animation<double> mascotOpacity;
+  AnimationController? _mascotFlickerController;
+    bool isConnecting = false;
+    bool isListening = false;
 
-String _currentTime = '';
+  String _currentTime = '';
 
-late Timer _clockTimer;
-  @override
-void initState() {
-  super.initState();
-  // Initialise device clock.
+  late Timer _clockTimer;
+    @override
+  void initState() {
+    super.initState();
+    // Initialise device clock.
 
-  // Initialise battery monitoring.
-_battery = Battery();
+    // Initialise battery monitoring.
+  _battery = Battery();
 
-// Get initial battery percentage.
-_updateBattery();
-
-// Refresh battery percentage every 30 seconds.
-_batteryRefreshTimer = Timer.periodic(
-  const Duration(seconds: 30),
-  (_) => _updateBattery(),
-);
-
-// Refresh when charging state changes.
-_batteryStateSubscription =
-    _battery.onBatteryStateChanged.listen((state) {
+  // Get initial battery percentage.
   _updateBattery();
-});
 
-// Get initial Wi-Fi signal.
-_updateWifi();
+  // Refresh battery percentage every 30 seconds.
+  _batteryRefreshTimer = Timer.periodic(
+    const Duration(seconds: 30),
+    (_) => _updateBattery(),
+  );
 
-// Refresh Wi-Fi signal every 5 seconds.
-_wifiRefreshTimer = Timer.periodic(
+  // Refresh when charging state changes.
+  _batteryStateSubscription =
+      _battery.onBatteryStateChanged.listen((state) {
+    _updateBattery();
+  });
+
+  // Get initial Wi-Fi signal.
+  _updateWifi();
+
+ // Refresh Wi-Fi signal every 5 seconds.
+ _wifiRefreshTimer = Timer.periodic(
   const Duration(seconds: 5),
   (_) => _updateWifi(),
-);
-_updateClock();
+ );
+ _updateClock();
 
-// Refresh the displayed time every second.
-_clockTimer = Timer.periodic(
+ // Refresh the displayed time every second.
+ _clockTimer = Timer.periodic(
   const Duration(seconds: 1),
   (_) => _updateClock(),
-);
+ );
 
   streamingService = StreamingService();
 
@@ -243,52 +244,31 @@ _clockTimer = Timer.periodic(
       weight: 30,
     ),
   ]).animate(mascotController);
-}
 
+    // Start continuous flickering after the startup animation.
+  mascotController.addStatusListener((status) {
+    if (status == AnimationStatus.completed && isPowerOn) {
+      _startMascotFlicker();
+    }
+  });
+}
 void _startMascotFlicker() {
+  debugPrint('STARTING MASCOT FLICKER');
+
   _mascotFlickerTimer?.cancel();
-  mascotFlickerOpacity = 1.0;
-  _scheduleMascotFlicker();
-}
 
-void _scheduleMascotFlicker() {
-  if (!mounted || !isPowerOn) return;
+  double opacity = 0.9;
 
-  final waitMs = flickerCheckMinMs +
-      _flickerRandom.nextInt(
-        flickerCheckMaxMs - flickerCheckMinMs + 1,
-      );
+  _mascotFlickerTimer = Timer.periodic(
+    const Duration(milliseconds: 16),
+    (timer) {
+      opacity = opacity == 0.9 ? 0.8 : 0.9;
 
-  _mascotFlickerTimer = Timer(
-    Duration(milliseconds: waitMs),
-    () {
-      if (!mounted || !isPowerOn) return;
-
-      final flickerOpacity = flickerMinOpacity +
-          _flickerRandom.nextDouble() *
-              (flickerMaxOpacity - flickerMinOpacity);
-
-      setState(() {
-        mascotFlickerOpacity = flickerOpacity;
-      });
-
-      final durationMs = flickerDurationMinMs +
-          _flickerRandom.nextInt(
-            flickerDurationMaxMs - flickerDurationMinMs + 1,
-          );
-
-      _mascotFlickerTimer = Timer(
-        Duration(milliseconds: durationMs),
-        () {
-          if (!mounted || !isPowerOn) return;
-
-          setState(() {
-            mascotFlickerOpacity = 1.0;
-          });
-
-          _scheduleMascotFlicker();
-        },
-      );
+      if (mounted) {
+        setState(() {
+          mascotFlickerOpacity = opacity;
+        });
+      }
     },
   );
 }
@@ -299,7 +279,7 @@ void _stopMascotFlicker() {
 
   if (mounted) {
     setState(() {
-      mascotFlickerOpacity = 1.0;
+      mascotFlickerOpacity = 0.9;
     });
   }
 }
@@ -392,7 +372,7 @@ _stopMascotFlicker();
     setState(() {
       isPowerOn = true;
     });
-  _startMascotFlicker();
+
     // Start mascot flicker animation.
     mascotController.forward(from: 0);
 
@@ -537,6 +517,7 @@ _batteryStateSubscription?.cancel();
 _clockTimer.cancel();
 _mascotFlickerTimer?.cancel();
   unawaited(streamingService.dispose());
+  _mascotFlickerController?.dispose();
   super.dispose();
 }
 
@@ -759,19 +740,21 @@ String get eqButtonImage {
   top: h * 0.3,
   width: w * 0.4,
   height: h * 0.4,
-  child: AnimatedBuilder(
-  animation: mascotOpacity,
+ child: AnimatedBuilder(
+    animation: mascotOpacity,
   builder: (context, child) {
     return Opacity(
-      opacity: isPowerOn ? mascotOpacity.value : 0.0,
+      opacity: isPowerOn
+          ? mascotOpacity.value * mascotFlickerOpacity
+          : 0.0,
       child: child,
     );
   },
-    child: Image.asset(
-      'assets/chosenMascot.png',
-      fit: BoxFit.contain,
-    ),
+  child: Image.asset(
+    'assets/chosenMascot.png',
+    fit: BoxFit.contain,
   ),
+),
 ),
 
 Positioned(
