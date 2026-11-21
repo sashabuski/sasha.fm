@@ -142,21 +142,19 @@ double previousVolume = 0.7;
 // MASCOT FLICKER SETTINGS
 
 // MASCOT FLICKER SETTINGS
+// MASCOT FLICKER SETTINGS
 
-// Flicker chance on each check.
-double flickerChance = 1.0;
-
-// Time between flicker checks.
-int flickerCheckMinMs = 300;
-int flickerCheckMaxMs = 600;
+// Time between flickers.
+int flickerCheckMinMs = 8000;
+int flickerCheckMaxMs = 12000;
 
 // Duration of each flicker.
-int flickerDurationMinMs = 80;
-int flickerDurationMaxMs = 180;
+int flickerDurationMinMs = 30;
+int flickerDurationMaxMs = 70;
 
 // Opacity during a flicker.
 double flickerMinOpacity = 0.0;
-double flickerMaxOpacity = 0.15;
+double flickerMaxOpacity = 0.1;
 
 final math.Random _flickerRandom = math.Random();
 
@@ -266,35 +264,31 @@ void _scheduleMascotFlicker() {
     () {
       if (!mounted || !isPowerOn) return;
 
-      if (_flickerRandom.nextDouble() < flickerChance) {
-        final flickerOpacity = flickerMinOpacity +
-            _flickerRandom.nextDouble() *
-                (flickerMaxOpacity - flickerMinOpacity);
+      final flickerOpacity = flickerMinOpacity +
+          _flickerRandom.nextDouble() *
+              (flickerMaxOpacity - flickerMinOpacity);
 
-        setState(() {
-          mascotFlickerOpacity = flickerOpacity;
-        });
+      setState(() {
+        mascotFlickerOpacity = flickerOpacity;
+      });
 
-        final durationMs = flickerDurationMinMs +
-            _flickerRandom.nextInt(
-              flickerDurationMaxMs - flickerDurationMinMs + 1,
-            );
+      final durationMs = flickerDurationMinMs +
+          _flickerRandom.nextInt(
+            flickerDurationMaxMs - flickerDurationMinMs + 1,
+          );
 
-        _mascotFlickerTimer = Timer(
-          Duration(milliseconds: durationMs),
-          () {
-            if (!mounted) return;
+      _mascotFlickerTimer = Timer(
+        Duration(milliseconds: durationMs),
+        () {
+          if (!mounted || !isPowerOn) return;
 
-            setState(() {
-              mascotFlickerOpacity = 1.0;
-            });
+          setState(() {
+            mascotFlickerOpacity = 1.0;
+          });
 
-            _scheduleMascotFlicker();
-          },
-        );
-      } else {
-        _scheduleMascotFlicker();
-      }
+          _scheduleMascotFlicker();
+        },
+      );
     },
   );
 }
@@ -769,10 +763,7 @@ String get eqButtonImage {
   animation: mascotOpacity,
   builder: (context, child) {
     return Opacity(
-      opacity: isPowerOn
-          ? (mascotOpacity.value * mascotFlickerOpacity)
-              .clamp(0.0, 1.0)
-          : 0.0,
+      opacity: isPowerOn ? mascotOpacity.value : 0.0,
       child: child,
     );
   },
