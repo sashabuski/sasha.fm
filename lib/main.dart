@@ -31,7 +31,7 @@ Future<void> main() async {
     screenSize.height * 0.8 * contentRatio,
   );
 
-  final maxHeight = maxWidth / contentRatio;
+ final maxHeight = screenSize.height * 0.8;
 
   // Calculate minimum dimensions.
   final minWidth = math.min(
@@ -69,7 +69,6 @@ Future<void> main() async {
   );
 
   // Maintain aspect ratio during resizing.
-  await windowManager.setAspectRatio(contentRatio);
 
   // Set initial window size.
   await windowManager.setSize(windowSize);
@@ -107,7 +106,7 @@ class _RadioScreenState extends State<RadioScreen>
 
   bool eqIsHovered = false;
   bool eqIsPressed = false;
-
+bool isPanelOpen = false;
   bool xIsHovered = false;
   bool xIsPressed = false;
 
@@ -243,6 +242,33 @@ _clockTimer = Timer.periodic(
       weight: 30,
     ),
   ]).animate(mascotController);
+}
+
+
+Future<void> togglePanel() async {
+  const double radioRatio = 3.0;
+  const double expandedPanelHeight = 300;
+
+  final currentSize = await windowManager.getSize();
+  final currentPosition = await windowManager.getPosition();
+
+  final radioHeight = currentSize.width / radioRatio;
+
+  final newHeight = isPanelOpen
+      ? radioHeight
+      : radioHeight + expandedPanelHeight;
+
+  await windowManager.setSize(
+    Size(currentSize.width, newHeight),
+  );
+
+  await windowManager.setPosition(currentPosition);
+
+  if (!mounted) return;
+
+  setState(() {
+    isPanelOpen = !isPanelOpen;
+  });
 }
 
 void _startMascotFlicker() {
@@ -490,7 +516,7 @@ Future<void> toggleWindowSize() async {
     screenSize.height * 0.8 * contentRatio,
   );
 
-  final maxHeight = maxWidth / contentRatio;
+  final maxHeight = screenSize.height * 0.8;
 
   // Calculate minimum dimensions.
   final minWidth = math.min(
@@ -725,8 +751,13 @@ String get eqButtonImage {
       backgroundColor: Colors.transparent,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          final h = constraints.maxHeight;
+         final w = constraints.maxWidth;
+final h = w / 3.0;
+
+final panelHeight = math.max(
+  0.0,
+  constraints.maxHeight - h,
+);
 
           // Scale interactive elements with window dimensions.
           final songFontSize = h * 0.122;
@@ -738,6 +769,14 @@ String get eqButtonImage {
             resizeEdgeSize: 10,
             child: Stack(
               children: [
+                // Main radio: fixed to its original 3:1 proportions.
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  width: w,
+                  height: h,
+                  child: Stack(
+                    children: [
                 // Background: radio artwork.
                 Positioned.fill(
   child: DragToMoveArea(
@@ -1388,9 +1427,7 @@ Positioned(
                           eqIsPressed = false;
                         });
                       },
-                      onTap: () {
-                       // debugPrint('EQUALISER BUTTON PRESSED');
-                      },
+                     onTap: togglePanel,
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 120),
                         switchInCurve: Curves.easeOut,
@@ -1475,6 +1512,22 @@ Positioned(
   ),
 ),
 
+                    ],
+                  ),
+                ),
+
+                // Expandable panel below the radio.
+                if (isPanelOpen)
+                  Positioned(
+                    left: 0,
+                    top: h,
+                    width: w,
+                    height: panelHeight,
+                    child: Image.asset(
+                      'assets/bottom_frame.png',
+                      fit: BoxFit.fill,
+                    ),
+                  ),
               ],
             ),
           );
