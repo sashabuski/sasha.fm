@@ -2,6 +2,10 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <wincodec.h>
+#include <vector>
+#include <string>
+#include <wrl/client.h>
 
 #include "resource.h"
 
@@ -111,6 +115,11 @@ void WindowClassRegistrar::UnregisterWindowClass() {
   class_registered_ = false;
 }
 
+namespace {
+  constexpr wchar_t kPlayerImagePath[] =
+      L"data/flutter_assets/assets/player.png";
+}
+
 Win32Window::Win32Window() {
   ++g_active_window_count;
 }
@@ -198,14 +207,18 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
     }
     case WM_SIZE: {
-      RECT rect = GetClientArea();
-      if (child_content_ != nullptr) {
-        // Size and position the child window.
-        MoveWindow(child_content_, rect.left, rect.top, rect.right - rect.left,
-                   rect.bottom - rect.top, TRUE);
-      }
-      return 0;
-    }
+  RECT rect = GetClientArea();
+
+  if (child_content_ != nullptr) {
+    MoveWindow(child_content_, rect.left, rect.top,
+               rect.right - rect.left,
+               rect.bottom - rect.top, TRUE);
+  }
+
+  ApplyWindowShape();
+
+  return 0;
+}
 
     case WM_ACTIVATE:
       if (child_content_ != nullptr) {
@@ -258,6 +271,208 @@ RECT Win32Window::GetClientArea() {
 HWND Win32Window::GetHandle() {
   return window_handle_;
 }
+
+
+void Win32Window::ApplyWindowShape() {
+  if (!window_handle_) {
+    return;
+  }
+
+  // Cache the PNG alpha channel so we only decode it once.
+  static std::vector<BYTE> pixels;
+  static UINT imageWidth = 0;
+  static UINT imageHeight = 0;
+  static bool attemptedLoad = false;
+
+  if (!attemptedLoad) {
+    attemptedLoad = true;
+
+    Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
+    Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+    Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+    Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+
+    HRESULT hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(factory.GetAddressOf())
+    );
+
+    if (FAILED(hr)) {
+      return;
+    }
+
+    // Find the executable's directory.
+    std::vector<wchar_t> modulePath(32768);
+
+    DWORD pathLength = GetModuleFileNameW(
+        nullptr,
+        modulePath.data(),
+        static_cast<DWORD>(modulePath.size())
+    );
+
+    if (pathLength == 0 || pathLength >= modulePath.size()) {
+      return;
+    }
+
+    std::wstring imagePath(modulePath.data(), pathLength);
+
+    const size_t separator = imagePath.find_last_of(L"\\/");
+
+    if (separator == std::wstring::npos) {
+      return;
+    }
+
+    imagePath.resize(separator + 1);
+    imagePath += kPlayerImagePath;
+
+    hr = factory->CreateDecoderFromFilename(
+        imagePath.c_str(),
+        nullptr,
+        GENERIC_READ,
+        WICDecodeMetadataCacheOnLoad,
+        decoder.GetAddressOf()
+    );
+
+    if (FAILED(hr)) {
+      return;
+    }
+
+    hr = decoder->GetFrame(0, frame.GetAddressOf());
+
+    if (FAILED(hr)) {
+      return;
+    }
+
+    hr = frame->GetSize(&imageWidth, &imageHeight);
+
+    if (FAILED(hr) || imageWidth == 0 || imageHeight == 0) {
+      return;
+    }
+
+    hr = factory->CreateFormatConverter(
+        converter.GetAddressOf()
+    );
+
+    if (FAILED(hr)) {
+      return;
+    }
+
+    hr = converter->Initialize(
+        frame.Get(),
+        GUID_WICPixelFormat32bppBGRA,
+        WICBitmapDitherTypeNone,
+        nullptr,
+        0.0,
+        WICBitmapPaletteTypeCustom
+    );
+
+    if (FAILED(hr)) {
+      return;
+    }
+
+    pixels.resize(
+        static_cast<size_t>(imageWidth) * imageHeight * 4
+    );
+
+    hr = converter->CopyPixels(
+        nullptr,
+        imageWidth * 4,
+        static_cast<UINT>(pixels.size()),
+        pixels.data()
+    );
+
+    if (FAILED(hr)) {
+      pixels.clear();
+      return;
+    }
+  }
+
+  if (pixels.empty()) {
+    return;
+  }
+
+  // Get the actual Windows window dimensions.
+  RECT rect;
+
+  if (!GetWindowRect(window_handle_, &rect)) {
+    return;
+  }
+
+  const int width = rect.right - rect.left;
+  const int height = rect.bottom - rect.top;
+
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  // Start with an empty region.
+  HRGN finalRegion = CreateRectRgn(0, 0, 0, 0);
+
+  if (!finalRegion) {
+    return;
+  }
+
+  // Alpha threshold: pixels below this are transparent.
+  constexpr BYTE alphaThreshold = 16;
+
+  // Convert each horizontal run of opaque pixels into a region.
+  for (int y = 0; y < height; ++y) {
+    const UINT sourceY =
+        static_cast<UINT>(
+            static_cast<uint64_t>(y) * imageHeight / height
+        );
+
+    int runStart = -1;
+
+    for (int x = 0; x <= width; ++x) {
+      bool opaque = false;
+
+      if (x < width) {
+        const UINT sourceX =
+            static_cast<UINT>(
+                static_cast<uint64_t>(x) * imageWidth / width
+            );
+
+        const size_t pixelIndex =
+            (static_cast<size_t>(sourceY) * imageWidth + sourceX) * 4;
+
+        // BGRA format: alpha is the fourth byte.
+        opaque = pixels[pixelIndex + 3] >= alphaThreshold;
+      }
+
+      if (opaque && runStart == -1) {
+        runStart = x;
+      }
+
+      if (!opaque && runStart != -1) {
+        HRGN runRegion = CreateRectRgn(
+            runStart, y, x, y + 1
+        );
+
+        if (runRegion) {
+          CombineRgn(
+              finalRegion,
+              finalRegion,
+              runRegion,
+              RGN_OR
+          );
+
+          DeleteObject(runRegion);
+        }
+
+        runStart = -1;
+      }
+    }
+  }
+
+  // Apply the region to the actual Windows window.
+  if (!SetWindowRgn(window_handle_, finalRegion, TRUE)) {
+    DeleteObject(finalRegion);
+  }
+}
+
 
 void Win32Window::SetQuitOnClose(bool quit_on_close) {
   quit_on_close_ = quit_on_close;

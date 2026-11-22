@@ -35,9 +35,10 @@ bool FlutterWindow::OnCreate() {
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
+ flutter_controller_->engine()->SetNextFrameCallback([&]() {
+  this->Show();
+  this->ApplyWindowShape();
+});
 
   flutter_controller_->ForceRedraw();
 
@@ -98,6 +99,7 @@ LRESULT FlutterWindow::MessageHandler(
       if (nearLeft || nearRight || nearTop || nearBottom) {
         return HTCLIENT;
       }
+      return HTCAPTION;
     }
   }
 

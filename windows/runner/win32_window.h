@@ -54,7 +54,8 @@ class Win32Window {
 
   // Return a RECT representing the bounds of the current client area.
   RECT GetClientArea();
-
+  // Applies the custom shape extracted from player.png.
+  void ApplyWindowShape();
  protected:
   // Processes and route salient window messages for mouse handling,
   // size change and DPI. Delegates handling of these to member overloads that

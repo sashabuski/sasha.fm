@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:tray_manager/tray_manager.dart' as tray;
+import 'package:flutter/gestures.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -812,8 +813,25 @@ String get eqButtonImage {
 
           return DragToResizeArea(
             resizeEdgeSize: 10,
-            child: Stack(
-              children: [
+            child: Listener(
+  behavior: HitTestBehavior.translucent,
+  onPointerDown: (event) {
+    final result = HitTestResult();
+
+    GestureBinding.instance.hitTestInView(
+      result,
+      event.position,
+      event.viewId,
+    );
+
+    debugPrint('========== CLICK ==========');
+
+    for (final entry in result.path) {
+      debugPrint('${entry.target.runtimeType}');
+    }
+  },
+  child: Stack(
+    children: [
                 // Background: radio artwork.
                 Positioned.fill(
   child: DragToMoveArea(
@@ -834,7 +852,7 @@ String get eqButtonImage {
   left: w * -0.07,
   top: h * 0.3,
   width: w * 0.4,
-  height: h * 0.4,
+  height: h * 0.4,child: DragToMoveArea(
  child: AnimatedBuilder(
     animation: mascotOpacity,
   builder: (context, child) {
@@ -850,6 +868,7 @@ String get eqButtonImage {
     fit: BoxFit.contain,
   ),
 ),
+  ),
 ),
 
 Positioned(
@@ -857,11 +876,12 @@ Positioned(
   top: h * 0.183,
   width: w * 0.114,
   height: h * 0.114,
- 
+ child: DragToMoveArea(
     child: Image.asset(
       'assets/livelight.png',
       fit: BoxFit.contain,
     ),
+ ),
 
 ),
 
@@ -1087,12 +1107,14 @@ Positioned(
   top: h * 0.426,
   width: w * 0.14,
   height: h * 0.14,
+  child: DragToMoveArea(
   child: Opacity(
     opacity: isPowerOn ? 0.8 : 0.0,
     child: Image.asset(
       'assets/light1.png',
       fit: BoxFit.contain,
     ),
+  ),
   ),
 ),
 Positioned(
@@ -1106,9 +1128,11 @@ Positioned(
         : Duration.zero,
     curve: Curves.easeIn,
     opacity: isPowerOn ? 0.8 : 0.0,
+    child: DragToMoveArea(
     child: Image.asset(
       'assets/onmimiradio.png',
       fit: BoxFit.contain,
+    ),
     ),
   ),
 ),
@@ -1119,10 +1143,12 @@ Positioned(
   height: h * 0.18,
   child: Opacity(
     opacity: isPowerOn ? 0.0 : 1.0,
+    child: DragToMoveArea(
     child: Image.asset(
       'assets/offmimiradio.png',
       fit: BoxFit.contain,
     ),
+  ),
   ),
 ),
 
@@ -1131,12 +1157,14 @@ Positioned(
   bottom: h * 0.115,
   width: w * 0.09,
   height: h * 0.09,
+  child: DragToMoveArea(
   child: Opacity(
     opacity: isPowerOn ? 0.8 : 0.0,
     child: Image.asset(
       'assets/nose.png',
       fit: BoxFit.contain,
     ),
+  ),
   ),
 ),
 
@@ -1145,12 +1173,14 @@ Positioned(
   top: h * 0.409,
   width: w * 0.19,
   height: h * 0.19,
+  child: DragToMoveArea(
   child: Opacity(
     opacity: isPowerOn ? 0.8 : 0.0,
     child: Image.asset(
       'assets/light2.png',
       fit: BoxFit.contain,
     ),
+  ),
   ),
 ),
 
@@ -1162,7 +1192,8 @@ Positioned(
   top: h * 0.43,
   //top: h * 0.495,
   width: w * 0.41,
-  child: Opacity(
+    child: DragToMoveArea(
+    child: Opacity(
   opacity: 0.75,
   child: ScrollingSongTitle(
     title: 'SASHA.FM ◕ ‿-｡︻デ┳═ー',
@@ -1188,6 +1219,7 @@ Positioned(
     ),
   ),
   ),
+    ),
 ),
 
 
@@ -1363,12 +1395,14 @@ if (isPowerOn)
 Positioned(
   right: w * 0.146,
   top: h * 0.39,
+  child: DragToMoveArea(
   child: Opacity(
     opacity:0.75,
   child: WifiIcon(
     signal: _wifiSignal,
     connected: _wifiConnected,
     size: h * 0.048,
+  ),
   ),
   ),
 ),
@@ -1378,12 +1412,14 @@ if (isPowerOn)
 Positioned(
   right: w * 0.18,
   top: h * 0.39,
+  child: DragToMoveArea(
   child: Opacity(
     opacity:0.75,
   
   child: BatteryIcon(
     level: _batteryLevel,
     size: h * 0.05,
+  ),
   ),
   ),
 ),
@@ -1393,6 +1429,7 @@ if (isPowerOn)
 Positioned(
   right: w * 0.084,
   top: h * 0.36,
+  child: DragToMoveArea(
   child: Opacity(
     opacity:0.75,
   child: Text(
@@ -1413,6 +1450,7 @@ Positioned(
         ),
       ],
     ),
+  ),
   ),
   ),
 ),
@@ -1572,7 +1610,8 @@ Positioned(
 // Red LIVE indicator - only visible when broadcaster is live.
 Positioned(
   left: w * 0.18,
-  top: h * 0.188,
+  top: h * 0.188, 
+  child: DragToMoveArea(
   child: ValueListenableBuilder<bool>(
     valueListenable: streamingService.isBroadcasterLive,
     builder: (context, isLive, child) {
@@ -1587,9 +1626,11 @@ Positioned(
       );
     },
   ),
+  ),
 ),
 
               ],
+            ),
             ),
           );
         },
@@ -1614,8 +1655,10 @@ class BatteryIcon extends StatelessWidget {
     return SizedBox(
       width: size * (38 / 24),
       height: size,
+      child: DragToMoveArea(
       child: CustomPaint(
         painter: _BatteryPainter(level),
+      ),
       ),
     );
   }
@@ -1637,11 +1680,13 @@ class WifiIcon extends StatelessWidget {
     return SizedBox(
       width: size * 1.5,
       height: size,
+      child: DragToMoveArea(
       child: CustomPaint(
         painter: _WifiPainter(
           signal: signal,
           connected: connected,
         ),
+      ),
       ),
     );
   }
