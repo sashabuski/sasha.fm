@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:tray_manager/tray_manager.dart' as tray;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -23,12 +24,12 @@ Future<void> main() async {
 
   // Minimum and maximum window scales.
   const minimumScale = 0.2;
-  const maximumScale = 0.8;
+  const maximumScale = 0.3;
 
   // Calculate maximum dimensions while preserving aspect ratio.
   final maxWidth = math.min(
     screenSize.width * maximumScale,
-    screenSize.height * 0.8 * contentRatio,
+    screenSize.height * 0.3 * contentRatio,
   );
 
   final maxHeight = maxWidth / contentRatio;
@@ -87,7 +88,7 @@ class SashaRadioApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Sasha Radio',
+      title: 'Mimi Radio',
       home: RadioScreen(),
     );
   }
@@ -99,9 +100,8 @@ class RadioScreen extends StatefulWidget {
   @override
   State<RadioScreen> createState() => _RadioScreenState();
 }
-
 class _RadioScreenState extends State<RadioScreen>
-    with TickerProviderStateMixin {  // Play button interaction states.
+    with TickerProviderStateMixin, tray.TrayListener { // Play button interaction states.
   bool isHovered = false;
   bool isPressed = false;
 
@@ -177,6 +177,9 @@ StreamSubscription<BatteryState>? _batteryStateSubscription;
     super.initState();
     // Initialise device clock.
 
+
+
+
     // Initialise battery monitoring.
   _battery = Battery();
 
@@ -211,8 +214,12 @@ StreamSubscription<BatteryState>? _batteryStateSubscription;
   (_) => _updateClock(),
  );
 
+
+
   streamingService = StreamingService();
 
+  // Initialise the tray before subscribing to icon updates.
+  _initTray();
   mascotController = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
@@ -251,6 +258,80 @@ StreamSubscription<BatteryState>? _batteryStateSubscription;
       _startMascotFlicker();
     }
   });
+}
+
+Future<void> _initTray() async {
+  // Set initial offline icon.
+  await tray.trayManager.setIcon('assets/icon.ico');
+  await tray.trayManager.setToolTip('MIMI.FM');
+
+  final menu = tray.Menu(
+    items: [
+      tray.MenuItem(
+        key: 'open',
+        label: 'Open MIMI.FM',
+      ),
+      tray.MenuItem.separator(),
+      tray.MenuItem(
+        key: 'exit',
+        label: 'Exit',
+      ),
+    ],
+  );
+
+  await tray.trayManager.setContextMenu(menu);
+
+  if (!mounted) return;
+
+  tray.trayManager.addListener(this);
+
+  // Subscribe only after the tray is ready.
+  streamingService.isBroadcasterLive.addListener(
+    _onBroadcastStatusChanged,
+  );
+
+  // Set the icon to the current broadcast state.
+  await updateTrayIcon(streamingService.isBroadcasterLive.value);
+}
+
+void _onBroadcastStatusChanged() {
+  updateTrayIcon(streamingService.isBroadcasterLive.value);
+}
+
+Future<void> updateTrayIcon(bool isLive) async {
+  await tray.trayManager.setIcon(
+    isLive
+        ? 'assets/liveicon2.ico'
+        : 'assets/icon.ico',
+  );
+}
+
+@override
+void onTrayIconMouseDown() {
+  _restoreWindow();
+}
+
+@override
+void onTrayIconRightMouseDown() {
+  tray.trayManager.popUpContextMenu();
+}
+
+@override
+void onTrayMenuItemClick(tray.MenuItem menuItem) {
+  if (menuItem.key == 'open') {
+    _restoreWindow();
+  } else if (menuItem.key == 'exit') {
+    _exitApp();
+  }
+}
+Future<void> _exitApp() async {
+  await tray.trayManager.destroy();
+  await windowManager.destroy();
+}
+Future<void> _restoreWindow() async {
+  await windowManager.show();
+  await windowManager.restore();
+  await windowManager.focus();
 }
 void _startMascotFlicker() {
   debugPrint('STARTING MASCOT FLICKER');
@@ -358,11 +439,24 @@ void _updateClock() {
  Future<void> toggleListening() async {
   if (isPowerOn) {
     // Turn radio OFF.
+
+debugPrint('MIN IMAGE BEFORE OFF: $minButtonImage');
+debugPrint('MIN HOVERED: $isMinHovered');
+debugPrint('MIN PRESSED: $isMinPressed');
+debugPrint('X IMAGE BEFORE OFF: $xButtonImage');
+debugPrint('X HOVERED: $xIsHovered');
+debugPrint('X PRESSED: $xIsPressed');
+
     setState(() {
+      
       isPowerOn = false;
       isListening = false;
     });
+
+    debugPrint('MIN IMAGE AFTER OFF: $minButtonImage');
+debugPrint('X IMAGE AFTER OFF: $xButtonImage');
 _stopMascotFlicker();
+
     mascotController.reset();
 
     await streamingService.disconnect();
@@ -388,25 +482,21 @@ _stopMascotFlicker();
       });
 
     } catch (e) {
-      //debugPrint('Connection error: $e');
+  debugPrint('Connection error: $e');
 
-      if (!mounted) return;
+  if (!mounted) return;
 
-      // Connection failed: turn radio OFF.
-      setState(() {
-        isPowerOn = false;
-        isListening = false;
-      });
-      _stopMascotFlicker();
-      mascotController.reset();
+  setState(() {
+    isListening = false;
+  });
 
-    } finally {
-      if (mounted) {
-        setState(() {
-          isConnecting = false;
-        });
-      }
-    }
+} finally {
+  if (mounted) {
+    setState(() {
+      isConnecting = false;
+    });
+  }
+}
   }
 }
 
@@ -462,12 +552,12 @@ Future<void> toggleWindowSize() async {
   // Match your existing main() configuration.
   const contentRatio = 3.0;
   const minimumScale = 0.2;
-  const maximumScale = 0.8;
+  const maximumScale = 0.3;
 
   // Calculate maximum dimensions.
   final maxWidth = math.min(
     screenSize.width * maximumScale,
-    screenSize.height * 0.8 * contentRatio,
+    screenSize.height * 0.3 * contentRatio,
   );
 
   final maxHeight = maxWidth / contentRatio;
@@ -510,6 +600,10 @@ Future<void> toggleWindowSize() async {
 }
  @override
 void dispose() {
+  streamingService.isBroadcasterLive.removeListener(
+  _onBroadcastStatusChanged,
+);
+  tray.trayManager.removeListener(this);
   mascotController.dispose();
   _batteryRefreshTimer.cancel();
   _wifiRefreshTimer.cancel();
@@ -710,7 +804,8 @@ String get eqButtonImage {
           final h = constraints.maxHeight;
 
           // Scale interactive elements with window dimensions.
-          final songFontSize = h * 0.122;
+         // final songFontSize = h * 0.122;
+         final songFontSize = h * 0.14;
         final stationFontSize = h * 0.10;
           final playButtonWidth = w * 0.24;
           final minButtonWidth = w * 0.047;
@@ -1000,8 +1095,36 @@ Positioned(
     ),
   ),
 ),
-
-
+Positioned(
+  left: w * 0.42,
+  top: h * 0.14,
+  width: w * 0.18,
+  height: h * 0.18,
+  child: AnimatedOpacity(
+    duration: isPowerOn
+        ? const Duration(milliseconds: 200)
+        : Duration.zero,
+    curve: Curves.easeIn,
+    opacity: isPowerOn ? 0.8 : 0.0,
+    child: Image.asset(
+      'assets/onmimiradio.png',
+      fit: BoxFit.contain,
+    ),
+  ),
+),
+Positioned(
+  left: w * 0.42,
+  top: h * 0.14,
+  width: w * 0.18,
+  height: h * 0.18,
+  child: Opacity(
+    opacity: isPowerOn ? 0.0 : 1.0,
+    child: Image.asset(
+      'assets/offmimiradio.png',
+      fit: BoxFit.contain,
+    ),
+  ),
+),
 
 Positioned(
   left: w * 0.459,
@@ -1036,12 +1159,13 @@ Positioned(
 if (isPowerOn)
 Positioned(
   left: w * 0.26,
-  top: h * 0.495,
+  top: h * 0.43,
+  //top: h * 0.495,
   width: w * 0.41,
   child: Opacity(
   opacity: 0.75,
   child: ScrollingSongTitle(
-    title: 'The Man - Taylor Swift',
+    title: 'SASHA.FM ◕ ‿-｡︻デ┳═ー',
     style: TextStyle(
       fontFamily: 'digital',
       color: const Color(0xFF94FFFF),
@@ -1099,7 +1223,7 @@ Positioned(
     child: Opacity(
   opacity: 0.75,
     child: Text(
-      'SASHA.FM ◕ ‿-｡︻デ┳═ー',
+      '',
       style: TextStyle(
         color: const Color(0xFF94FFFF),
         fontSize: stationFontSize,
@@ -1120,6 +1244,8 @@ Positioned(
 
                 // Close window button.
                 Positioned(
+                    key: const ValueKey('close-window-button'),
+
                   right: w * 0.083,
                   top: h * 0.186,
                   child: MouseRegion(
@@ -1152,7 +1278,10 @@ Positioned(
                         });
                       },
                       onTap: () async {
-                        await windowManager.close();
+                        await windowManager.hide();
+                        if (isPowerOn) {
+                        await toggleListening();
+                      }
                       },
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 120),
@@ -1172,6 +1301,7 @@ Positioned(
 
 // Window maximise / restore button.
 Positioned(
+  key: const ValueKey('maximise-window-button'),
   left: w * 0.827,
   top: h * 0.188,
   child: MouseRegion(
@@ -1289,6 +1419,7 @@ Positioned(
 
                 // Minimise window button.
                 Positioned(
+                  key: const ValueKey('minimise-window-button'),
                   left: w * 0.778,
                   top: h * 0.192,
                   child: MouseRegion(
@@ -1321,7 +1452,7 @@ Positioned(
                         });
                       },
                       onTap: () async {
-                        await windowManager.minimize();
+                       await windowManager.minimize();
                       },
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 120),

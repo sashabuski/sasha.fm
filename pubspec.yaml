@@ -18,7 +18,7 @@ dependencies:
   livekit_client: 2.10.0
   http: ^1.6.0
   battery_plus: ^7.1.2
-
+  tray_manager: ^0.5.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -88,6 +88,10 @@ flutter:
     - assets/onwindowbutpressed.png
     - assets/onyxbut_hovered.png
     - assets/onyxbut_pressed.png
+    - assets/icon.ico
+    - assets/liveicon2.ico
+    - assets/onmimiradio.png
+    - assets/offmimiradio.png
   fonts:
     - family: digital
       fonts:
