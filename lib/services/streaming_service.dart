@@ -8,7 +8,7 @@ import 'package:livekit_client/livekit_client.dart';
 
 class StreamingService {
   static const String _tokenServer =
-      'http://127.0.0.1:3000';
+      'https://sasha-download-api.sashabuskin12.workers.dev/api/download';
 
   static const String _equaliserTopic =
       'sasha-fm-equaliser';
